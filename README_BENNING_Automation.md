@@ -58,7 +58,7 @@ This gives a direct interim workflow while Power Automate Desktop GUI import is 
 - `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1`: moves `Incoming` to `DB`, starts PC-Win, waits for release, writes back to SD, archives files.
 - `Write-MasterDatabaseToSdIfUnchanged.ps1`: protected checkout from master database to SD. Only writes if the SD database still matches the last imported hash.
 - `Watch-PdfExportAndPrintNewPdfs.ps1`: watches exported PDFs and prints/archives them.
-- `Register-SdWatcherAtUserLogon.ps1`: registers the watcher as a Windows logon task for a specific user.
+- `PATflow-RegistrationOnLogon.ps1`: registers SD workflow and PDF print watchers as Windows logon tasks for a specific user.
 
 ## Launchers
 
@@ -112,8 +112,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Watc
 Run PowerShell as administrator:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Register-SdWatcherAtUserLogon.ps1" -UserId ".\Testa"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\PATflow-RegistrationOnLogon.ps1" -UserId ".\Testa"
 ```
+
+The helper registers two scheduled tasks:
+
+- `PATflow SD Card Workflow Watcher`
+- `PATflow PDF Print Watcher`
 
 The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and verifies that Windows can resolve the account.
 
