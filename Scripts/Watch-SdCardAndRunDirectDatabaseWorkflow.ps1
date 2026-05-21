@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\Common-BenningAutomation.ps1"
+. "$PSScriptRoot\Shared-BenningAutomationFunctions.ps1"
 
 function Get-ImportWatcherPollSeconds {
     param($Config)
@@ -19,7 +19,7 @@ function Get-ImportWatcherPollSeconds {
 function Invoke-BenningPrepareOnce {
     param($ConfigPath)
 
-    $prepareScript = Join-Path $PSScriptRoot "Prepare-BenningMerge.ps1"
+    $prepareScript = Join-Path $PSScriptRoot "Copy-DeviceDatabaseFromSdToIncoming.ps1"
     $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $prepareScript, "-Json", "-SkipUnchanged", "-SuppressErrorMessage")
     if ($ConfigPath) {
         $arguments += @("-ConfigPath", $ConfigPath)
@@ -39,7 +39,7 @@ function Invoke-BenningIncomingProcessor {
         [Parameter(Mandatory = $true)]$PrepareResult
     )
 
-    $processorScript = Join-Path $PSScriptRoot "Process-BenningIncomingDatabase.ps1"
+    $processorScript = Join-Path $PSScriptRoot "Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1"
     $arguments = @(
         "-NoProfile",
         "-ExecutionPolicy",

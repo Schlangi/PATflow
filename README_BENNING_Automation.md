@@ -1,130 +1,123 @@
-# BENNING ST750A Automation
+# PATflow BENNING ST750A Automation
 
-This package is a workstation automation template for BENNING ST750A / PC-Win ST 750-760.
+PATflow automates the temporary SD-card workflow for a BENNING ST750A / PC-Win ST 750-760 workstation.
+
+## Current PATflow Flow
+
+This is the currently implemented workflow. It does **not** automate the PC-Win "merge database" dialog yet.
+
+1. `Watch-SdCardAndRunDirectDatabaseWorkflow.ps1` runs continuously, normally every 10 seconds.
+2. If no SD card or device database is present, this is treated as normal idle state.
+3. When a device database appears or changes, `Copy-DeviceDatabaseFromSdToIncoming.ps1` copies it from the SD card into `Incoming`.
+4. The copied file keeps its original file name, for example:
+
+```text
+D:\Device-001.sdf
+C:\PATflow\Incoming\Device-001.sdf
+```
+
+5. `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` moves the file from `Incoming` to `DB`.
+6. BENNING PC-Win is started only after the database file is in `DB`.
+7. The user works on the database in PC-Win.
+8. PATflow waits until PC-Win has locked and then released the database file.
+9. The original SD-card database is moved to `Archive`.
+10. The changed database from `DB` is copied back to the SD card.
+11. The changed `DB` working file is moved to `Archive`.
+
+This gives a direct interim workflow while Power Automate Desktop GUI import is not implemented.
+
+## What Is Not Implemented Yet
+
+- No automated PC-Win `File -> Database -> Merge database` flow.
+- No direct reverse-engineering merge of BENNING databases.
+- No hidden bidirectional live sync.
+- No blind overwrite of changed SD-card data.
 
 ## Database Model
 
-- The PC master database is the leading database.
+- The PC master database remains the leading database conceptually.
 - The SD card is the device working database.
-- Checkout: the PC master database is written to the SD card.
-- Checkin: the SD working database is merged into the master database in PC-Win by using "Merge database".
-- Do not use a permanent bidirectional live-sync model.
+- Current interim mode works directly on a copied SD database in `DB`.
+- Later PAD mode can still use BENNING's official merge workflow.
 
-## Files
+## Important Folders
 
-- `Config/config.json`: central configuration
-- `Scripts/Common-BenningAutomation.ps1`: shared functions
-- `Scripts/Prepare-BenningMerge.ps1`: import preparation for Power Automate Desktop
-- `Scripts/Watch-BenningImports.ps1`: cyclic import watcher
-- `Scripts/Process-BenningIncomingDatabase.ps1`: interim direct PC-Win database workflow
-- `Scripts/Register-BenningImportWatcherLogonTask.ps1`: Windows logon task registration helper
-- `Scripts/Write-BenningDbToDevice.ps1`: protected write-back to the SD card
-- `Scripts/Print-NewBenningPdfs.ps1`: PDF printing and archiving
-- `Launchers/*.bat`: simple launcher files for desktop shortcuts
+- `Config`: central configuration
+- `Incoming`: fresh copies from SD, original file names preserved
+- `DB`: active working database for PC-Win
+- `Archive`: archived SD originals and changed PC-Win working databases
+- `Backups`: master database backups for future merge workflow
+- `Logs`: technical log file
+- `State`: hashes and metadata used to skip unchanged databases safely
 
-## Installation
+## Main Scripts
 
-1. Copy this folder to `C:\BenningAutomation`.
-2. Check `Config\config.json`:
-   - `MasterDbPath`
-   - `BenningProgramPath`
-   - `BenningProgramArguments`
-   - `BenningProcessName`
-   - `FileAccessTimeoutSeconds`
-   - `ImportWatcher.PollSeconds`
-   - `DeviceDatabase.PreferExactCandidateMatch`
-   - `DeviceDatabase.SearchRoots`
-   - SD card database file names and extensions
-   - PDF export folder and printer
-3. Place the PC master database at `C:\BenningAutomation\DB\BENNING_Master.db` or adjust `MasterDbPath`.
-4. Create desktop shortcuts to the files in `Launchers`.
+- `Shared-BenningAutomationFunctions.ps1`: shared helper functions only. Do not start directly.
+- `Watch-SdCardAndRunDirectDatabaseWorkflow.ps1`: long-running SD-card watcher. Starts the current direct workflow.
+- `Copy-DeviceDatabaseFromSdToIncoming.ps1`: copies a changed SD database to `Incoming`. Does not start PC-Win.
+- `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1`: moves `Incoming` to `DB`, starts PC-Win, waits for release, writes back to SD, archives files.
+- `Write-MasterDatabaseToSdIfUnchanged.ps1`: protected checkout from master database to SD. Only writes if the SD database still matches the last imported hash.
+- `Watch-PdfExportAndPrintNewPdfs.ps1`: watches exported PDFs and prints/archives them.
+- `Register-SdWatcherAtUserLogon.ps1`: registers the watcher as a Windows logon task for a specific user.
 
-## Flow 1: Import Results
+## Launchers
 
-Power Automate Desktop should run this first:
+- `PATflow_Start_SD_Watcher.bat`: start the normal watcher.
+- `PATflow_Copy_SD_Database_To_Incoming.bat`: copy SD database to `Incoming` once.
+- `PATflow_Run_Direct_Database_Workflow.bat`: process an already copied file from `Incoming`.
+- `PATflow_Write_Master_Database_To_SD.bat`: protected write from master database to SD.
+- `PATflow_Start_PDF_Print_Watcher.bat`: start PDF print watcher.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Prepare-BenningMerge.ps1"
-```
+## Configuration
 
-The last output line is the local path to the working database. The original SD card database file name is preserved, for example:
+Check `Config\config.json` before running:
 
-```text
-C:\BenningAutomation\Incoming\Device-001.sdf
-```
-
-Then in PC-Win:
-
-1. Start the program and wait for the main window.
-2. Open the master database.
-3. Select `File -> Database -> Merge database`.
-4. Enter the path returned by PowerShell in the file dialog.
-5. Start the merge.
-6. Detect the completion dialog.
-7. On success, show a simple message: `Results were imported successfully.`
-
-Power Automate Desktop should use UI elements and window titles. Mouse coordinates should only be used as a documented emergency fallback.
-
-## Import Watcher
-
-For unattended import preparation, start:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Watch-BenningImports.ps1"
-```
-
-The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. If no removable media or device database is present, the watcher treats that as the normal idle state and checks again in the next cycle. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds.
-
-While Power Automate Desktop import is not implemented, the watcher uses `Process-BenningIncomingDatabase.ps1` for a direct interim workflow. The copied database is moved from `Incoming` to `DB`, then BENNING PC-Win is started. After PC-Win has used and released the DB file, the original SD database is archived, the changed DB file is copied back to the SD card, and the changed DB working file is archived.
+- `BasePath`
+- `MasterDbPath`
+- `BenningProgramPath`
+- `BenningProgramArguments`
+- `BenningProcessName`
+- `FileAccessTimeoutSeconds`
+- `ImportWatcher.PollSeconds`
+- `ImportWatcher.ProcessIncomingDirectly`
+- `DeviceDatabase.CandidateFileNames`
+- `DeviceDatabase.SearchRoots`
 
 If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
 
-To start the watcher automatically when a specific Windows user logs on, run PowerShell as administrator and register a logon task:
+## Start Watcher
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Register-BenningImportWatcherLogonTask.ps1" -UserId "DOMAIN\UserName"
+C:\PATflow\Launchers\PATflow_Start_SD_Watcher.bat
 ```
 
-For Microsoft Entra ID / Azure AD accounts, the user id is often shaped like:
-
-```text
-AzureAD\user@company.com
-```
-
-The task runs only when that user is logged on, so BENNING PC-Win and Windows notifications remain visible in that user's desktop session.
-
-## Flow 2: Write Test Data To Device
+Or directly:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Write-BenningDbToDevice.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Watch-SdCardAndRunDirectDatabaseWorkflow.ps1"
 ```
 
-The script writes to the SD card only if the current hash of the SD database matches the last imported hash for that database file name. If the hash differs, the write is aborted to protect test results that have not been imported yet.
-
-Before hashing, copying, or overwriting database files, the scripts check whether the file is locked. The default timeout is 3 seconds and can be changed with `FileAccessTimeoutSeconds` in `Config\config.json`.
-
-For fast SD card detection, list the real BENNING database file name first in `DeviceDatabase.CandidateFileNames`. With `DeviceDatabase.PreferExactCandidateMatch` enabled, the first exact match is used immediately and the script skips the slower fallback scan for additional `.sdf` or `.db` files. If the SD card uses a stable drive letter, set `DeviceDatabase.SearchRoots`, for example `[ "D:\\" ]`, to skip automatic drive discovery entirely.
-
-## Flow 3: PDF Printing
-
-BENNING exports PDFs to `PDF.ExportPath` from the configuration. The script watches that folder, prints new PDFs, and then moves them to `PDF.ArchivePath`.
-
-One-time run:
+One cycle only:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Print-NewBenningPdfs.ps1" -Once
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Watch-SdCardAndRunDirectDatabaseWorkflow.ps1" -Once
 ```
 
-Continuous watcher:
+## Register Watcher At User Logon
+
+Run PowerShell as administrator:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Print-NewBenningPdfs.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Register-SdWatcherAtUserLogon.ps1" -UserId ".\Testa"
 ```
 
-## Workstation Notes
+The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and verifies that Windows can resolve the account.
 
-- Set Windows display scaling to 100 percent.
-- Start the BENNING window maximized.
-- Assign a fixed SD card volume label such as `BENNING`.
-- Verify the BENNING database extension before production use: `.sdf` or `.db`.
-- Enable `AllowExtensionMismatchOnWrite` only when the database format is known to be compatible.
+## Safety Notes
+
+- Missing SD card is normal idle state.
+- Database file access is checked with a short timeout.
+- Unchanged SD databases are skipped by file metadata first.
+- Full hashing is only done when metadata indicates a change.
+- Original SD databases are archived before write-back.
+- If write-back fails after archiving the original SD file, PATflow restores the original file to the SD card.

@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\Common-BenningAutomation.ps1"
+. "$PSScriptRoot\Shared-BenningAutomationFunctions.ps1"
 
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath

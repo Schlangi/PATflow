@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\Common-BenningAutomation.ps1"
+. "$PSScriptRoot\Shared-BenningAutomationFunctions.ps1"
 
 function Wait-ForBenningWorkSession {
     param(

@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-. "$PSScriptRoot\Common-BenningAutomation.ps1"
+. "$PSScriptRoot\Shared-BenningAutomationFunctions.ps1"
 
 function Resolve-BenningScheduledTaskUserId {
     param([Parameter(Mandatory = $true)][string]$UserId)
@@ -29,7 +29,7 @@ function Resolve-BenningScheduledTaskUserId {
 
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
-    $watcherScript = Join-Path $PSScriptRoot "Watch-BenningImports.ps1"
+    $watcherScript = Join-Path $PSScriptRoot "Watch-SdCardAndRunDirectDatabaseWorkflow.ps1"
     $resolvedUserId = Resolve-BenningScheduledTaskUserId -UserId $UserId
 
     if (!(Test-Path -LiteralPath $watcherScript)) {
