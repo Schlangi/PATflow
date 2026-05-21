@@ -26,6 +26,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
    - `MasterDbPath`
    - `BenningProgramPath`
    - `FileAccessTimeoutSeconds`
+   - `DeviceDatabase.PreferExactCandidateMatch`
    - SD card database file names and extensions
    - PDF export folder and printer
 3. Place the PC master database at `C:\BenningAutomation\DB\BENNING_Master.db` or adjust `MasterDbPath`.
@@ -66,6 +67,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Sc
 The script writes to the SD card only if the current hash of the SD database matches the last imported hash. If the hash differs, the write is aborted to protect test results that have not been imported yet.
 
 Before hashing, copying, or overwriting database files, the scripts check whether the file is locked. The default timeout is 3 seconds and can be changed with `FileAccessTimeoutSeconds` in `Config\config.json`.
+
+For fast SD card detection, list the real BENNING database file name first in `DeviceDatabase.CandidateFileNames`. With `DeviceDatabase.PreferExactCandidateMatch` enabled, the first exact match is used immediately and the script skips the slower fallback scan for additional `.sdf` or `.db` files.
 
 ## Flow 3: PDF Printing
 

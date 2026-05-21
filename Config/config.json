@@ -6,6 +6,7 @@
   "DeviceDatabase": {
     "RequireRemovableDrive": true,
     "SearchRootOnly": true,
+    "PreferExactCandidateMatch": true,
     "AllowedExtensions": [ ".sdf", ".db" ],
     "CandidateFileNames": [
       "BENNING.sdf",

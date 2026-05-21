@@ -109,8 +109,16 @@ function Show-BenningMessage {
 function Get-DriveCandidates {
     param($Config)
 
-    $drives = Get-CimInstance Win32_LogicalDisk | Where-Object {
-        $_.DriveType -eq 2 -or !$Config.DeviceDatabase.RequireRemovableDrive
+    $requireRemovableDrive = [bool]$Config.DeviceDatabase.RequireRemovableDrive
+    $drives = [System.IO.DriveInfo]::GetDrives() | Where-Object {
+        $_.IsReady -and ($_.DriveType -eq [System.IO.DriveType]::Removable -or !$requireRemovableDrive)
+    } | ForEach-Object {
+        [pscustomobject]@{
+            Root = $_.RootDirectory.FullName
+            VolumeName = $_.VolumeLabel
+            Drive = $_.Name.TrimEnd("\")
+            DriveType = $_.DriveType.ToString()
+        }
     }
 
     $preferredLabels = @($Config.DeviceDatabase.PreferredVolumeLabels)
@@ -129,11 +137,15 @@ function Find-BenningDeviceDatabase {
     $allowedExtensions = @($Config.DeviceDatabase.AllowedExtensions)
     $candidateNames = @($Config.DeviceDatabase.CandidateFileNames)
     $searchRootOnly = [bool]$Config.DeviceDatabase.SearchRootOnly
+    $preferExactCandidateMatch = $true
+    if ($null -ne $Config.DeviceDatabase.PreferExactCandidateMatch) {
+        $preferExactCandidateMatch = [bool]$Config.DeviceDatabase.PreferExactCandidateMatch
+    }
 
     $matches = New-Object System.Collections.Generic.List[object]
 
     foreach ($drive in (Get-DriveCandidates -Config $Config)) {
-        $root = $drive.DeviceID + "\"
+        $root = $drive.Root
         if (!(Test-Path -LiteralPath $root)) {
             continue
         }
@@ -142,11 +154,16 @@ function Find-BenningDeviceDatabase {
             $candidate = Join-Path $root $name
             if (Test-Path -LiteralPath $candidate) {
                 $item = Get-Item -LiteralPath $candidate
+                if ($preferExactCandidateMatch) {
+                    Write-BenningLog -Config $Config -Message "Exact device database match found: $($item.FullName)"
+                    return $item
+                }
+
                 $matches.Add([pscustomobject]@{
                     File = $item
                     Score = 0
                     VolumeName = $drive.VolumeName
-                    Drive = $drive.DeviceID
+                    Drive = $drive.Drive
                 })
             }
         }
@@ -168,7 +185,7 @@ function Find-BenningDeviceDatabase {
                     File = $file
                     Score = $score
                     VolumeName = $drive.VolumeName
-                    Drive = $drive.DeviceID
+                    Drive = $drive.Drive
                 })
             }
         }
