@@ -63,6 +63,8 @@ try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
     $pollSeconds = Get-ImportWatcherPollSeconds -Config $config
+    $handledDeviceNames = @{}
+    $handledChangedHashes = @{}
     Write-BenningLog -Config $config -Message "Starting BENNING import watcher. Poll seconds: $pollSeconds"
 
     do {
@@ -70,12 +72,41 @@ try {
             $result = Invoke-BenningPrepareOnce -ConfigPath $config.ConfigPath
 
             if ($result -and $result.NoDeviceDatabase) {
+                $handledDeviceNames.Clear()
+                $handledChangedHashes.Clear()
                 continue
             }
 
-            if ($result -and $result.Success -and $result.Changed) {
-                $fileName = Split-Path -Leaf $result.DeviceDbPath
-                $message = "New data is ready to import from database: $fileName"
+            if ($result -and $result.Success -and $result.SourceDeviceDbPath) {
+                $fileName = Split-Path -Leaf $result.SourceDeviceDbPath
+                $resultHash = [string]$result.Hash
+
+                if ($result.Changed) {
+                    if ($resultHash -and $handledChangedHashes.ContainsKey($fileName) -and $handledChangedHashes[$fileName] -eq $resultHash) {
+                        Write-BenningLog -Config $config -Message "Changed database was already handed to the direct workflow during this SD session, skipping cycle: $fileName"
+                        continue
+                    }
+                } elseif ($handledDeviceNames.ContainsKey($fileName)) {
+                    Write-BenningLog -Config $config -Message "Unchanged database was already handled during this SD session, skipping cycle: $fileName"
+                    continue
+                }
+
+                if (Test-BenningDirectWorkflowRunning -Config $config -DeviceDatabaseName $fileName) {
+                    Write-BenningLog -Config $config -Message "Direct workflow already running for database, skipping cycle: $fileName"
+                    continue
+                }
+
+                $handledDeviceNames[$fileName] = $true
+                if ($result.Changed -and $resultHash) {
+                    $handledChangedHashes[$fileName] = $resultHash
+                }
+
+                if ($result.Changed) {
+                    $message = "New data is ready to process from database: $fileName"
+                } else {
+                    $message = "Device database is present and unchanged; starting direct workflow: $fileName"
+                }
+
                 Write-BenningLog -Config $config -Message $message
 
                 if (Test-BenningConfigSwitch -Value $config.ImportWatcher.ProcessIncomingDirectly -Default $true) {

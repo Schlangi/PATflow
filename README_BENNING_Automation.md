@@ -8,21 +8,25 @@ This is the currently implemented workflow. It does **not** automate the PC-Win 
 
 1. `Watch-SdCardAndRunDirectDatabaseWorkflow.ps1` runs continuously, normally every 10 seconds.
 2. If no SD card or device database is present, this is treated as normal idle state.
-3. When a device database appears or changes, `Copy-DeviceDatabaseFromSdToIncoming.ps1` copies it from the SD card into `Incoming`.
-4. The copied file keeps its original file name, for example:
+3. When a device database appears or changes, PATflow starts the direct workflow once for the current SD-card session.
+4. If the SD database changed since the last completed workflow, `Copy-DeviceDatabaseFromSdToIncoming.ps1` copies it from the SD card into `Incoming`.
+5. The copied file keeps its original file name, for example:
 
 ```text
 D:\Device-001.sdf
 C:\PATflow\Incoming\Device-001.sdf
 ```
 
-5. `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` moves the file from `Incoming` to `DB`.
-6. BENNING PC-Win is started only after the database file is in `DB`.
-7. The user works on the database in PC-Win.
-8. PATflow waits until PC-Win has locked and then released the database file.
-9. The original SD-card database is moved to `Archive`.
-10. The changed database from `DB` is copied back to the SD card.
-11. The changed `DB` working file is moved to `Archive`.
+6. If the SD database is unchanged but the SD card was newly connected, the workflow still copies the SD database directly into `DB` if no working copy exists.
+7. `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` moves the file from `Incoming` to `DB`, or uses/copies the matching SD database when there is no new `Incoming` file.
+8. BENNING PC-Win is started only after the database file is in `DB`.
+9. The user works on the database in PC-Win.
+10. PATflow waits until PC-Win has locked and then released the database file. If the file is already locked, this is accepted as the active work session.
+11. The original SD-card database is moved to `Archive`.
+12. The changed database from `DB` is copied back to the SD card.
+13. The changed `DB` working file is moved to `Archive`.
+
+If new SD data is copied to `Incoming` while a working database with the same name already exists in `DB`, PATflow stops the new import and shows a conflict notification. The current PC-Win workflow must be finished first.
 
 This gives a direct interim workflow while Power Automate Desktop GUI import is not implemented.
 
@@ -166,7 +170,7 @@ The PDFs remain archived after printing. PATflow does not delete archived PDFs a
 
 - Missing SD card is normal idle state.
 - Database file access is checked with a short timeout.
-- Unchanged SD databases are skipped by file metadata first.
+- Unchanged SD databases are handled once when the SD card is newly connected, then skipped during the same SD-card session.
 - Full hashing is only done when metadata indicates a change.
 - Original SD databases are archived before write-back.
 - If write-back fails after archiving the original SD file, PATflow restores the original file to the SD card.

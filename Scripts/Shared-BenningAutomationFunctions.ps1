@@ -84,6 +84,27 @@ function Get-BenningDeviceStateMetadataPath {
     return Join-Path $paths.State ("last_device_import_metadata_{0}.json" -f $safeName)
 }
 
+function Get-BenningDirectWorkflowStatePath {
+    param(
+        $Config,
+        [Parameter(Mandatory = $true)][string]$DeviceDatabaseName
+    )
+
+    $paths = Get-BenningPaths -Config $Config
+    $safeName = ConvertTo-SafeStateFileName -Name $DeviceDatabaseName
+    return Join-Path $paths.State ("direct_workflow_running_{0}.lock" -f $safeName)
+}
+
+function Test-BenningDirectWorkflowRunning {
+    param(
+        $Config,
+        [Parameter(Mandatory = $true)][string]$DeviceDatabaseName
+    )
+
+    $statePath = Get-BenningDirectWorkflowStatePath -Config $Config -DeviceDatabaseName $DeviceDatabaseName
+    return Test-Path -LiteralPath $statePath
+}
+
 function Get-BenningFileMetadata {
     param([Parameter(Mandatory = $true)]$File)
 
