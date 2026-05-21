@@ -367,6 +367,12 @@ function Find-BenningDeviceDatabase {
     return @($uniqueMatches)[0].File
 }
 
+function Test-BenningNoDeviceDatabaseError {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    return $Message -like "No BENNING device database found*"
+}
+
 function Get-BenningFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
 

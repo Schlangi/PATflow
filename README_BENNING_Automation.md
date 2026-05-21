@@ -70,7 +70,7 @@ For unattended import preparation, start:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Watch-BenningImports.ps1"
 ```
 
-The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds. When a changed database is copied into `Incoming`, the watcher starts BENNING PC-Win if it is not already running. If BENNING PC-Win is already running, it shows a Windows notification with the database file name that is ready to import.
+The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. If no removable media or device database is present, the watcher treats that as the normal idle state and checks again in the next cycle. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds. When a changed database is copied into `Incoming`, the watcher starts BENNING PC-Win if it is not already running. If BENNING PC-Win is already running, it shows a Windows notification with the database file name that is ready to import.
 
 ## Flow 2: Write Test Data To Device
 

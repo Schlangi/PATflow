@@ -107,6 +107,22 @@ try {
     }
 } catch {
     if ($config) {
+        $isNoDeviceDatabase = Test-BenningNoDeviceDatabaseError -Message $_.Exception.Message
+
+        if ($isNoDeviceDatabase -and $SuppressErrorMessage) {
+            Write-BenningLog -Config $config -Message "No device database found. Waiting for removable media."
+            if ($Json) {
+                [pscustomobject]@{
+                    Success = $true
+                    Changed = $false
+                    NoDeviceDatabase = $true
+                    Message = $_.Exception.Message
+                } | ConvertTo-Json -Depth 4
+            }
+
+            return
+        }
+
         Write-BenningLog -Config $config -Level "ERROR" -Message $_.Exception.Message
         if (!$SuppressErrorMessage) {
             Show-BenningMessage -Config $config -Icon "Error" -Message "BENNING result import could not be prepared.`nPlease do not perform any further tests.`n`nError log: $((Get-BenningPaths -Config $config).LogFile)"

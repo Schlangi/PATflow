@@ -43,6 +43,10 @@ try {
         try {
             $result = Invoke-BenningPrepareOnce -ConfigPath $config.ConfigPath
 
+            if ($result -and $result.NoDeviceDatabase) {
+                continue
+            }
+
             if ($result -and $result.Success -and $result.Changed) {
                 $fileName = Split-Path -Leaf $result.DeviceDbPath
                 $message = "New data is ready to import from database: $fileName"
