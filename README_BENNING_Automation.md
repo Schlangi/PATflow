@@ -15,6 +15,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
 - `Config/config.json`: central configuration
 - `Scripts/Common-BenningAutomation.ps1`: shared functions
 - `Scripts/Prepare-BenningMerge.ps1`: import preparation for Power Automate Desktop
+- `Scripts/Watch-BenningImports.ps1`: cyclic import watcher
 - `Scripts/Write-BenningDbToDevice.ps1`: protected write-back to the SD card
 - `Scripts/Print-NewBenningPdfs.ps1`: PDF printing and archiving
 - `Launchers/*.bat`: simple launcher files for desktop shortcuts
@@ -25,7 +26,9 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
 2. Check `Config\config.json`:
    - `MasterDbPath`
    - `BenningProgramPath`
+   - `BenningProcessName`
    - `FileAccessTimeoutSeconds`
+   - `ImportWatcher.PollSeconds`
    - `DeviceDatabase.PreferExactCandidateMatch`
    - `DeviceDatabase.SearchRoots`
    - SD card database file names and extensions
@@ -58,6 +61,16 @@ Then in PC-Win:
 7. On success, show a simple message: `Results were imported successfully.`
 
 Power Automate Desktop should use UI elements and window titles. Mouse coordinates should only be used as a documented emergency fallback.
+
+## Import Watcher
+
+For unattended import preparation, start:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Watch-BenningImports.ps1"
+```
+
+The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds. When a changed database is copied into `Incoming`, the watcher starts BENNING PC-Win if it is not already running. If BENNING PC-Win is already running, it shows a Windows notification with the database file name that is ready to import.
 
 ## Flow 2: Write Test Data To Device
 

@@ -2,7 +2,13 @@
   "BasePath": "C:\\BenningAutomation",
   "MasterDbPath": "C:\\BenningAutomation\\DB\\BENNING_Master.db",
   "BenningProgramPath": "C:\\Program Files\\BENNING\\PC-Win ST 750-760\\PC-Win ST 750-760.exe",
+  "BenningProcessName": "",
   "FileAccessTimeoutSeconds": 3,
+  "ImportWatcher": {
+    "PollSeconds": 10,
+    "StartBenningWhenNewDataArrives": true,
+    "NotifyWhenBenningIsAlreadyRunning": true
+  },
   "DeviceDatabase": {
     "RequireRemovableDrive": true,
     "SearchRootOnly": true,

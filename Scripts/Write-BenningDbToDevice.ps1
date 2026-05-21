@@ -49,11 +49,16 @@ try {
     $newHash = Get-BenningFileHash -Path $deviceDb.FullName
     $newHash | Set-Content -LiteralPath $paths.StateHashFile -Encoding ASCII
     $newHash | Set-Content -LiteralPath $deviceStateHashFile -Encoding ASCII
+    $deviceStateMetadataFile = Get-BenningDeviceStateMetadataPath -Config $config -DeviceDatabaseName $deviceDb.Name
+    Get-BenningFileMetadata -File (Get-Item -LiteralPath $deviceDb.FullName) |
+        ConvertTo-Json -Depth 4 |
+        Set-Content -LiteralPath $deviceStateMetadataFile -Encoding UTF8
 
     Write-BenningLog -Config $config -Message "SD database backup: $backupFile"
     Write-BenningLog -Config $config -Message "Master database written to: $($deviceDb.FullName)"
     Write-BenningLog -Config $config -Message "New hash saved: $newHash"
     Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
+    Write-BenningLog -Config $config -Message "Device-specific metadata file: $deviceStateMetadataFile"
     Show-BenningMessage -Config $config -Icon "Information" -Message "Test data was successfully written to the device."
 
     if ($Json) {
@@ -63,6 +68,7 @@ try {
             BackupPath = $backupFile
             Hash = $newHash
             DeviceStateHashPath = $deviceStateHashFile
+            DeviceStateMetadataPath = $deviceStateMetadataFile
         } | ConvertTo-Json -Depth 4
     } else {
         Write-Output $deviceDb.FullName

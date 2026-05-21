@@ -73,6 +73,36 @@ function Get-BenningDeviceStateHashPath {
     return Join-Path $paths.State ("last_device_import_hash_{0}.txt" -f $safeName)
 }
 
+function Get-BenningDeviceStateMetadataPath {
+    param(
+        $Config,
+        [Parameter(Mandatory = $true)][string]$DeviceDatabaseName
+    )
+
+    $paths = Get-BenningPaths -Config $Config
+    $safeName = ConvertTo-SafeStateFileName -Name $DeviceDatabaseName
+    return Join-Path $paths.State ("last_device_import_metadata_{0}.json" -f $safeName)
+}
+
+function Get-BenningFileMetadata {
+    param([Parameter(Mandatory = $true)]$File)
+
+    return [pscustomobject]@{
+        Length = [int64]$File.Length
+        LastWriteTimeUtcTicks = [int64]$File.LastWriteTimeUtc.Ticks
+    }
+}
+
+function Test-BenningFileMetadataUnchanged {
+    param(
+        [Parameter(Mandatory = $true)]$CurrentMetadata,
+        [Parameter(Mandatory = $true)]$PreviousMetadata
+    )
+
+    return ([int64]$CurrentMetadata.Length -eq [int64]$PreviousMetadata.Length) -and
+        ([int64]$CurrentMetadata.LastWriteTimeUtcTicks -eq [int64]$PreviousMetadata.LastWriteTimeUtcTicks)
+}
+
 function Initialize-BenningFolders {
     param($Config)
 
@@ -121,6 +151,101 @@ function Show-BenningMessage {
         [System.Windows.MessageBoxButton]::OK,
         $messageIcon
     ) | Out-Null
+}
+
+function Escape-BenningXmlText {
+    param([AllowNull()][string]$Text)
+
+    return [System.Security.SecurityElement]::Escape($Text)
+}
+
+function Show-BenningToastNotification {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Message,
+        $Config
+    )
+
+    try {
+        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+
+        $appId = $Config.Ui.MessageTitle
+        if ([string]::IsNullOrWhiteSpace($appId)) {
+            $appId = "PATflow BENNING Automation"
+        }
+
+        $xmlText = @"
+<toast>
+  <visual>
+    <binding template="ToastGeneric">
+      <text>$(Escape-BenningXmlText -Text $Title)</text>
+      <text>$(Escape-BenningXmlText -Text $Message)</text>
+    </binding>
+  </visual>
+</toast>
+"@
+
+        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+        $xml.LoadXml($xmlText)
+        $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
+        Write-BenningLog -Config $Config -Message "Toast notification shown: $Title - $Message"
+        return $true
+    } catch {
+        Write-BenningLog -Config $Config -Level "WARN" -Message "Toast notification failed: $($_.Exception.Message)"
+        Show-BenningMessage -Config $Config -Icon "Information" -Message "$Title`n`n$Message"
+        return $false
+    }
+}
+
+function Get-BenningProcessName {
+    param($Config)
+
+    if (![string]::IsNullOrWhiteSpace($Config.BenningProcessName)) {
+        return $Config.BenningProcessName
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Config.BenningProgramPath)) {
+        throw "BenningProgramPath is not configured."
+    }
+
+    return [System.IO.Path]::GetFileNameWithoutExtension($Config.BenningProgramPath)
+}
+
+function Test-BenningConfigSwitch {
+    param(
+        $Value,
+        [bool]$Default = $true
+    )
+
+    if ($null -eq $Value) {
+        return $Default
+    }
+
+    return [bool]$Value
+}
+
+function Test-BenningProgramRunning {
+    param($Config)
+
+    $processName = Get-BenningProcessName -Config $Config
+    return $null -ne (Get-Process -Name $processName -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+
+function Start-BenningProgram {
+    param($Config)
+
+    if ([string]::IsNullOrWhiteSpace($Config.BenningProgramPath)) {
+        throw "BenningProgramPath is not configured."
+    }
+
+    if (!(Test-Path -LiteralPath $Config.BenningProgramPath)) {
+        throw "BENNING program not found: $($Config.BenningProgramPath)"
+    }
+
+    Start-Process -FilePath $Config.BenningProgramPath -WindowStyle Maximized
+    Write-BenningLog -Config $Config -Message "BENNING PC-Win started: $($Config.BenningProgramPath)"
 }
 
 function Get-DriveCandidates {
