@@ -18,8 +18,8 @@ try {
     Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "Read" -Purpose "device database import copy"
     Wait-BenningFileAccess -Config $config -Path $masterDb.FullName -Access "Read" -Purpose "master database backup"
 
-    $incomingFile = Join-Path $paths.Incoming ("latest_from_device" + $deviceDb.Extension)
-    $archiveFile = Join-Path $paths.Archive ("DeviceDB_{0}{1}" -f $timestamp, $deviceDb.Extension)
+    $incomingFile = Join-Path $paths.Incoming $deviceDb.Name
+    $archiveFile = Join-Path $paths.Archive ("{0}_{1}" -f $timestamp, $deviceDb.Name)
     $backupFile = Join-Path $paths.Backups ("BENNING_Master_before_merge_{0}{1}" -f $timestamp, $masterDb.Extension)
 
     Copy-Item -LiteralPath $deviceDb.FullName -Destination $incomingFile -Force
@@ -28,12 +28,15 @@ try {
 
     $hash = Get-BenningFileHash -Path $deviceDb.FullName
     $hash | Set-Content -LiteralPath $paths.StateHashFile -Encoding ASCII
+    $deviceStateHashFile = Get-BenningDeviceStateHashPath -Config $config -DeviceDatabaseName $deviceDb.Name
+    $hash | Set-Content -LiteralPath $deviceStateHashFile -Encoding ASCII
 
     Write-BenningLog -Config $config -Message "Device database found: $($deviceDb.FullName)"
     Write-BenningLog -Config $config -Message "Import copy: $incomingFile"
     Write-BenningLog -Config $config -Message "Archive copy: $archiveFile"
     Write-BenningLog -Config $config -Message "Master database backup: $backupFile"
     Write-BenningLog -Config $config -Message "Hash saved: $hash"
+    Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
     Write-BenningLog -Config $config -Message "Preparation completed"
 
     if ($Json) {
@@ -44,6 +47,7 @@ try {
             ArchivePath = $archiveFile
             BackupPath = $backupFile
             Hash = $hash
+            DeviceStateHashPath = $deviceStateHashFile
         } | ConvertTo-Json -Depth 4
     } else {
         Write-Output $incomingFile

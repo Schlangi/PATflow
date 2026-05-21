@@ -27,6 +27,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
    - `BenningProgramPath`
    - `FileAccessTimeoutSeconds`
    - `DeviceDatabase.PreferExactCandidateMatch`
+   - `DeviceDatabase.SearchRoots`
    - SD card database file names and extensions
    - PDF export folder and printer
 3. Place the PC master database at `C:\BenningAutomation\DB\BENNING_Master.db` or adjust `MasterDbPath`.
@@ -40,10 +41,10 @@ Power Automate Desktop should run this first:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Prepare-BenningMerge.ps1"
 ```
 
-The last output line is the local path to the working database, for example:
+The last output line is the local path to the working database. The original SD card database file name is preserved, for example:
 
 ```text
-C:\BenningAutomation\Incoming\latest_from_device.sdf
+C:\BenningAutomation\Incoming\Device-001.sdf
 ```
 
 Then in PC-Win:
@@ -64,11 +65,11 @@ Power Automate Desktop should use UI elements and window titles. Mouse coordinat
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Write-BenningDbToDevice.ps1"
 ```
 
-The script writes to the SD card only if the current hash of the SD database matches the last imported hash. If the hash differs, the write is aborted to protect test results that have not been imported yet.
+The script writes to the SD card only if the current hash of the SD database matches the last imported hash for that database file name. If the hash differs, the write is aborted to protect test results that have not been imported yet.
 
 Before hashing, copying, or overwriting database files, the scripts check whether the file is locked. The default timeout is 3 seconds and can be changed with `FileAccessTimeoutSeconds` in `Config\config.json`.
 
-For fast SD card detection, list the real BENNING database file name first in `DeviceDatabase.CandidateFileNames`. With `DeviceDatabase.PreferExactCandidateMatch` enabled, the first exact match is used immediately and the script skips the slower fallback scan for additional `.sdf` or `.db` files.
+For fast SD card detection, list the real BENNING database file name first in `DeviceDatabase.CandidateFileNames`. With `DeviceDatabase.PreferExactCandidateMatch` enabled, the first exact match is used immediately and the script skips the slower fallback scan for additional `.sdf` or `.db` files. If the SD card uses a stable drive letter, set `DeviceDatabase.SearchRoots`, for example `[ "D:\\" ]`, to skip automatic drive discovery entirely.
 
 ## Flow 3: PDF Printing
 

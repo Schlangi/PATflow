@@ -7,6 +7,7 @@
     "RequireRemovableDrive": true,
     "SearchRootOnly": true,
     "PreferExactCandidateMatch": true,
+    "SearchRoots": [],
     "AllowedExtensions": [ ".sdf", ".db" ],
     "CandidateFileNames": [
       "BENNING.sdf",

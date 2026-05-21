@@ -56,6 +56,23 @@ function Get-BenningPaths {
     }
 }
 
+function ConvertTo-SafeStateFileName {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    return ($Name -replace '[^a-zA-Z0-9._-]', '_')
+}
+
+function Get-BenningDeviceStateHashPath {
+    param(
+        $Config,
+        [Parameter(Mandatory = $true)][string]$DeviceDatabaseName
+    )
+
+    $paths = Get-BenningPaths -Config $Config
+    $safeName = ConvertTo-SafeStateFileName -Name $DeviceDatabaseName
+    return Join-Path $paths.State ("last_device_import_hash_{0}.txt" -f $safeName)
+}
+
 function Initialize-BenningFolders {
     param($Config)
 
@@ -108,6 +125,23 @@ function Show-BenningMessage {
 
 function Get-DriveCandidates {
     param($Config)
+
+    $searchRoots = @($Config.DeviceDatabase.SearchRoots) | Where-Object { ![string]::IsNullOrWhiteSpace($_) }
+    if ($searchRoots.Count -gt 0) {
+        return $searchRoots | ForEach-Object {
+            $root = $_
+            if (!$root.EndsWith("\")) {
+                $root = $root + "\"
+            }
+
+            [pscustomobject]@{
+                Root = $root
+                VolumeName = ""
+                Drive = $root.TrimEnd("\")
+                DriveType = "Configured"
+            }
+        }
+    }
 
     $requireRemovableDrive = [bool]$Config.DeviceDatabase.RequireRemovableDrive
     $drives = [System.IO.DriveInfo]::GetDrives() | Where-Object {

@@ -17,12 +17,18 @@ try {
     Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "Read" -Purpose "device database hash check"
     Wait-BenningFileAccess -Config $config -Path $masterDb.FullName -Access "Read" -Purpose "master database write source check"
 
-    if (!(Test-Path -LiteralPath $paths.StateHashFile)) {
+    $deviceStateHashFile = Get-BenningDeviceStateHashPath -Config $config -DeviceDatabaseName $deviceDb.Name
+    $stateHashFile = $deviceStateHashFile
+    if (!(Test-Path -LiteralPath $stateHashFile)) {
+        $stateHashFile = $paths.StateHashFile
+    }
+
+    if (!(Test-Path -LiteralPath $stateHashFile)) {
         throw "No last import hash found. Run BENNING result import first."
     }
 
     $currentHash = Get-BenningFileHash -Path $deviceDb.FullName
-    $lastImportedHash = (Get-Content -LiteralPath $paths.StateHashFile -ErrorAction Stop | Select-Object -First 1).Trim()
+    $lastImportedHash = (Get-Content -LiteralPath $stateHashFile -ErrorAction Stop | Select-Object -First 1).Trim()
 
     if ($currentHash -ne $lastImportedHash) {
         throw "The database on the SD card has changed since the last import. Overwrite aborted. Run BENNING result import first."
@@ -42,10 +48,12 @@ try {
 
     $newHash = Get-BenningFileHash -Path $deviceDb.FullName
     $newHash | Set-Content -LiteralPath $paths.StateHashFile -Encoding ASCII
+    $newHash | Set-Content -LiteralPath $deviceStateHashFile -Encoding ASCII
 
     Write-BenningLog -Config $config -Message "SD database backup: $backupFile"
     Write-BenningLog -Config $config -Message "Master database written to: $($deviceDb.FullName)"
     Write-BenningLog -Config $config -Message "New hash saved: $newHash"
+    Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
     Show-BenningMessage -Config $config -Icon "Information" -Message "Test data was successfully written to the device."
 
     if ($Json) {
@@ -54,6 +62,7 @@ try {
             DeviceDbPath = $deviceDb.FullName
             BackupPath = $backupFile
             Hash = $newHash
+            DeviceStateHashPath = $deviceStateHashFile
         } | ConvertTo-Json -Depth 4
     } else {
         Write-Output $deviceDb.FullName
