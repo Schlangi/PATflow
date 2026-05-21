@@ -1,0 +1,36 @@
+{
+  "BasePath": "C:\\BenningAutomation",
+  "MasterDbPath": "C:\\BenningAutomation\\DB\\BENNING_Master.db",
+  "BenningProgramPath": "C:\\Program Files\\BENNING\\PC-Win ST 750-760\\PC-Win ST 750-760.exe",
+  "DeviceDatabase": {
+    "RequireRemovableDrive": true,
+    "SearchRootOnly": true,
+    "AllowedExtensions": [ ".sdf", ".db" ],
+    "CandidateFileNames": [
+      "BENNING.sdf",
+      "BENNING.db",
+      "ST750.sdf",
+      "ST750.db",
+      "ST750A.sdf",
+      "ST750A.db"
+    ],
+    "PreferredVolumeLabels": [
+      "BENNING",
+      "ST750",
+      "ST750A"
+    ],
+    "AllowExtensionMismatchOnWrite": false
+  },
+  "Pdf": {
+    "ExportPath": "C:\\BenningAutomation\\PDF_Export",
+    "ArchivePath": "C:\\BenningAutomation\\PDF_Archive",
+    "QueuePath": "C:\\BenningAutomation\\PrintQueue",
+    "PrinterName": "",
+    "PollSeconds": 5,
+    "StableFileSeconds": 3
+  },
+  "Ui": {
+    "ShowMessageBox": true,
+    "MessageTitle": "BENNING Automation"
+  }
+}
