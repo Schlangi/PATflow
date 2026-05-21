@@ -82,6 +82,10 @@ Check `Config\config.json` before running:
 - `ImportWatcher.ProcessIncomingDirectly`
 - `DeviceDatabase.CandidateFileNames`
 - `DeviceDatabase.SearchRoots`
+- `Pdf.ExportPath`
+- `Pdf.ArchivePath`
+- `Pdf.QueuePath`
+- `Pdf.PrinterName`
 
 If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
 
@@ -113,6 +117,46 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Regi
 
 The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and verifies that Windows can resolve the account.
 
+## PDF Printing
+
+BENNING PC-Win should export reports as PDF into the folder configured by `Pdf.ExportPath`, for example:
+
+```text
+C:\PATflow\PDF_Export
+```
+
+`Watch-PdfExportAndPrintNewPdfs.ps1` watches that folder. For every new PDF it:
+
+1. waits until the PDF file size is stable,
+2. copies the PDF into `Pdf.QueuePath`,
+3. prints it,
+4. moves the original exported PDF into `Pdf.ArchivePath`.
+
+Start the watcher with:
+
+```powershell
+C:\PATflow\Launchers\PATflow_Start_PDF_Print_Watcher.bat
+```
+
+Or directly:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Watch-PdfExportAndPrintNewPdfs.ps1"
+```
+
+For a safe one-time test run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\PATflow\Scripts\Watch-PdfExportAndPrintNewPdfs.ps1" -Once
+```
+
+Printer selection:
+
+- If `Pdf.PrinterName` is empty, Windows uses the default PDF print handler/default printer.
+- If `Pdf.PrinterName` is set, the script uses `PrintTo` with that printer name.
+
+The PDFs remain archived after printing. PATflow does not delete archived PDFs automatically.
+
 ## Safety Notes
 
 - Missing SD card is normal idle state.
@@ -121,3 +165,4 @@ The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and v
 - Full hashing is only done when metadata indicates a change.
 - Original SD databases are archived before write-back.
 - If write-back fails after archiving the original SD file, PATflow restores the original file to the SD card.
+- PDF printing keeps exported PDFs in `Pdf.ArchivePath` after printing.
