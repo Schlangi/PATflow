@@ -10,9 +10,27 @@ param(
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\Common-BenningAutomation.ps1"
 
+function Resolve-BenningScheduledTaskUserId {
+    param([Parameter(Mandatory = $true)][string]$UserId)
+
+    $normalizedUserId = $UserId.Trim()
+    if ($normalizedUserId.StartsWith(".\")) {
+        $normalizedUserId = "$env:COMPUTERNAME\$($normalizedUserId.Substring(2))"
+    }
+
+    try {
+        $account = [System.Security.Principal.NTAccount]::new($normalizedUserId)
+        $null = $account.Translate([System.Security.Principal.SecurityIdentifier])
+        return $normalizedUserId
+    } catch {
+        throw "Windows cannot resolve user '$UserId' (normalized as '$normalizedUserId'). Check the exact Windows login name. For local users use '$env:COMPUTERNAME\UserName'."
+    }
+}
+
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     $watcherScript = Join-Path $PSScriptRoot "Watch-BenningImports.ps1"
+    $resolvedUserId = Resolve-BenningScheduledTaskUserId -UserId $UserId
 
     if (!(Test-Path -LiteralPath $watcherScript)) {
         throw "Import watcher script not found: $watcherScript"
@@ -29,8 +47,8 @@ try {
     ) -join " "
 
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $UserId
-    $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType Interactive -RunLevel Limited
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $resolvedUserId
+    $principal = New-ScheduledTaskPrincipal -UserId $resolvedUserId -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet `
         -AllowStartIfOnBatteries `
         -DontStopIfGoingOnBatteries `
@@ -48,9 +66,9 @@ try {
         -Description "Starts the PATflow BENNING import watcher when the configured user logs on." `
         -Force | Out-Null
 
-    Write-BenningLog -Config $config -Message "Registered import watcher logon task '$TaskName' for user '$UserId'"
+    Write-BenningLog -Config $config -Message "Registered import watcher logon task '$TaskName' for user '$resolvedUserId'"
     Write-Output "Scheduled task registered: $TaskName"
-    Write-Output "User: $UserId"
+    Write-Output "User: $resolvedUserId"
     Write-Output "Watcher: $watcherScript"
 } catch {
     if ($config) {
