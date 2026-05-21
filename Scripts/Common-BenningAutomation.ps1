@@ -234,7 +234,10 @@ function Test-BenningProgramRunning {
 }
 
 function Start-BenningProgram {
-    param($Config)
+    param(
+        $Config,
+        [string]$DatabasePath
+    )
 
     if ([string]::IsNullOrWhiteSpace($Config.BenningProgramPath)) {
         throw "BenningProgramPath is not configured."
@@ -244,7 +247,21 @@ function Start-BenningProgram {
         throw "BENNING program not found: $($Config.BenningProgramPath)"
     }
 
-    Start-Process -FilePath $Config.BenningProgramPath -WindowStyle Maximized
+    $startProcessParameters = @{
+        FilePath = $Config.BenningProgramPath
+        WindowStyle = "Maximized"
+    }
+
+    if (![string]::IsNullOrWhiteSpace($Config.BenningProgramArguments)) {
+        $arguments = $Config.BenningProgramArguments
+        if ($DatabasePath) {
+            $arguments = $arguments.Replace("{DatabasePath}", $DatabasePath)
+        }
+
+        $startProcessParameters.ArgumentList = $arguments
+    }
+
+    Start-Process @startProcessParameters
     Write-BenningLog -Config $Config -Message "BENNING PC-Win started: $($Config.BenningProgramPath)"
 }
 
@@ -387,6 +404,22 @@ function Get-BenningFileAccessTimeout {
     }
 
     return 3
+}
+
+function Test-BenningFileAccess {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [ValidateSet("Read", "ReadWrite")][string]$Access = "Read"
+    )
+
+    $fileAccess = [System.IO.FileAccess]::$Access
+    try {
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, $fileAccess, [System.IO.FileShare]::None)
+        $stream.Dispose()
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 function Wait-BenningFileAccess {

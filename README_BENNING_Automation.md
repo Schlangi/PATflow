@@ -16,6 +16,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
 - `Scripts/Common-BenningAutomation.ps1`: shared functions
 - `Scripts/Prepare-BenningMerge.ps1`: import preparation for Power Automate Desktop
 - `Scripts/Watch-BenningImports.ps1`: cyclic import watcher
+- `Scripts/Process-BenningIncomingDatabase.ps1`: interim direct PC-Win database workflow
 - `Scripts/Register-BenningImportWatcherLogonTask.ps1`: Windows logon task registration helper
 - `Scripts/Write-BenningDbToDevice.ps1`: protected write-back to the SD card
 - `Scripts/Print-NewBenningPdfs.ps1`: PDF printing and archiving
@@ -27,6 +28,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
 2. Check `Config\config.json`:
    - `MasterDbPath`
    - `BenningProgramPath`
+   - `BenningProgramArguments`
    - `BenningProcessName`
    - `FileAccessTimeoutSeconds`
    - `ImportWatcher.PollSeconds`
@@ -71,7 +73,11 @@ For unattended import preparation, start:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Watch-BenningImports.ps1"
 ```
 
-The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. If no removable media or device database is present, the watcher treats that as the normal idle state and checks again in the next cycle. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds. When a changed database is copied into `Incoming`, the watcher starts BENNING PC-Win if it is not already running. If BENNING PC-Win is already running, it shows a Windows notification with the database file name that is ready to import.
+The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. If no removable media or device database is present, the watcher treats that as the normal idle state and checks again in the next cycle. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds.
+
+While Power Automate Desktop import is not implemented, the watcher uses `Process-BenningIncomingDatabase.ps1` for a direct interim workflow. The copied database is moved from `Incoming` to `DB`, then BENNING PC-Win is started. After PC-Win has used and released the DB file, the original SD database is archived, the changed DB file is copied back to the SD card, and the changed DB working file is archived.
+
+If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
 
 To start the watcher automatically when a specific Windows user logs on, run PowerShell as administrator and register a logon task:
 

@@ -33,6 +33,32 @@ function Invoke-BenningPrepareOnce {
     return ($output | Out-String | ConvertFrom-Json)
 }
 
+function Invoke-BenningIncomingProcessor {
+    param(
+        $ConfigPath,
+        [Parameter(Mandatory = $true)]$PrepareResult
+    )
+
+    $processorScript = Join-Path $PSScriptRoot "Process-BenningIncomingDatabase.ps1"
+    $arguments = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "`"$processorScript`"",
+        "-IncomingPath",
+        "`"$($PrepareResult.DeviceDbPath)`"",
+        "-SourceDeviceDbPath",
+        "`"$($PrepareResult.SourceDeviceDbPath)`""
+    )
+
+    if ($ConfigPath) {
+        $arguments += @("-ConfigPath", "`"$ConfigPath`"")
+    }
+
+    Start-Process -FilePath "powershell.exe" -ArgumentList ($arguments -join " ") -WindowStyle Hidden
+}
+
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
@@ -52,7 +78,9 @@ try {
                 $message = "New data is ready to import from database: $fileName"
                 Write-BenningLog -Config $config -Message $message
 
-                if (Test-BenningProgramRunning -Config $config) {
+                if (Test-BenningConfigSwitch -Value $config.ImportWatcher.ProcessIncomingDirectly -Default $true) {
+                    Invoke-BenningIncomingProcessor -ConfigPath $config.ConfigPath -PrepareResult $result
+                } elseif (Test-BenningProgramRunning -Config $config) {
                     if (Test-BenningConfigSwitch -Value $config.ImportWatcher.NotifyWhenBenningIsAlreadyRunning -Default $true) {
                         Show-BenningToastNotification -Config $config -Title "BENNING import required" -Message $message | Out-Null
                     }

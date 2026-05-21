@@ -27,7 +27,7 @@ try {
     $deviceStateMetadataFile = Get-BenningDeviceStateMetadataPath -Config $config -DeviceDatabaseName $deviceDb.Name
     $currentMetadata = Get-BenningFileMetadata -File $deviceDb
 
-    if ($SkipUnchanged -and (Test-Path -LiteralPath $deviceStateMetadataFile) -and (Test-Path -LiteralPath $incomingFile)) {
+    if ($SkipUnchanged -and (Test-Path -LiteralPath $deviceStateMetadataFile)) {
         $previousMetadata = Get-Content -LiteralPath $deviceStateMetadataFile -Raw -ErrorAction Stop | ConvertFrom-Json
         if (Test-BenningFileMetadataUnchanged -CurrentMetadata $currentMetadata -PreviousMetadata $previousMetadata) {
             $previousHash = $null
@@ -56,7 +56,7 @@ try {
 
     if ($SkipUnchanged -and (Test-Path -LiteralPath $deviceStateHashFile)) {
         $previousHash = (Get-Content -LiteralPath $deviceStateHashFile -ErrorAction Stop | Select-Object -First 1).Trim()
-        if ($hash -eq $previousHash -and (Test-Path -LiteralPath $incomingFile)) {
+        if ($hash -eq $previousHash) {
             Write-BenningLog -Config $config -Message "Device database unchanged, skipping import copy: $($deviceDb.FullName)"
             if ($Json) {
                 [pscustomobject]@{
