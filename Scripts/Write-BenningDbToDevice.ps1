@@ -14,6 +14,9 @@ try {
     $masterDb = Assert-BenningMasterDb -Config $config
     $deviceDb = Find-BenningDeviceDatabase -Config $config
 
+    Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "Read" -Purpose "device database hash check"
+    Wait-BenningFileAccess -Config $config -Path $masterDb.FullName -Access "Read" -Purpose "master database write source check"
+
     if (!(Test-Path -LiteralPath $paths.StateHashFile)) {
         throw "No last import hash found. Run BENNING result import first."
     }
@@ -31,6 +34,8 @@ try {
 
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $backupFile = Join-Path $paths.Archive ("DeviceDB_before_write_{0}{1}" -f $timestamp, $deviceDb.Extension)
+
+    Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "ReadWrite" -Purpose "device database overwrite"
 
     Copy-Item -LiteralPath $deviceDb.FullName -Destination $backupFile -Force
     Copy-Item -LiteralPath $masterDb.FullName -Destination $deviceDb.FullName -Force

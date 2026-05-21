@@ -2,6 +2,7 @@
   "BasePath": "C:\\BenningAutomation",
   "MasterDbPath": "C:\\BenningAutomation\\DB\\BENNING_Master.db",
   "BenningProgramPath": "C:\\Program Files\\BENNING\\PC-Win ST 750-760\\PC-Win ST 750-760.exe",
+  "FileAccessTimeoutSeconds": 3,
   "DeviceDatabase": {
     "RequireRemovableDrive": true,
     "SearchRootOnly": true,

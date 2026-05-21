@@ -15,6 +15,9 @@ try {
     $deviceDb = Find-BenningDeviceDatabase -Config $config
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
+    Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "Read" -Purpose "device database import copy"
+    Wait-BenningFileAccess -Config $config -Path $masterDb.FullName -Access "Read" -Purpose "master database backup"
+
     $incomingFile = Join-Path $paths.Incoming ("latest_from_device" + $deviceDb.Extension)
     $archiveFile = Join-Path $paths.Archive ("DeviceDB_{0}{1}" -f $timestamp, $deviceDb.Extension)
     $backupFile = Join-Path $paths.Backups ("BENNING_Master_before_merge_{0}{1}" -f $timestamp, $masterDb.Extension)

@@ -197,6 +197,43 @@ function Get-BenningFileHash {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Get-BenningFileAccessTimeout {
+    param($Config)
+
+    if ($Config.FileAccessTimeoutSeconds -and [int]$Config.FileAccessTimeoutSeconds -gt 0) {
+        return [int]$Config.FileAccessTimeoutSeconds
+    }
+
+    return 3
+}
+
+function Wait-BenningFileAccess {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [ValidateSet("Read", "ReadWrite")][string]$Access = "Read",
+        [string]$Purpose = "file access",
+        $Config
+    )
+
+    $timeoutSeconds = Get-BenningFileAccessTimeout -Config $Config
+    $deadline = (Get-Date).AddSeconds($timeoutSeconds)
+    $lastError = $null
+    $fileAccess = [System.IO.FileAccess]::$Access
+
+    do {
+        try {
+            $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, $fileAccess, [System.IO.FileShare]::None)
+            $stream.Dispose()
+            return
+        } catch {
+            $lastError = $_.Exception.Message
+            Start-Sleep -Milliseconds 200
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    throw "File is locked or not accessible after $timeoutSeconds seconds during ${Purpose}: $Path. Close BENNING PC-Win and try again. Last error: $lastError"
+}
+
 function Assert-BenningMasterDb {
     param($Config)
 
