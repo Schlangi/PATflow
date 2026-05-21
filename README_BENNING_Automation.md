@@ -16,6 +16,7 @@ This package is a workstation automation template for BENNING ST750A / PC-Win ST
 - `Scripts/Common-BenningAutomation.ps1`: shared functions
 - `Scripts/Prepare-BenningMerge.ps1`: import preparation for Power Automate Desktop
 - `Scripts/Watch-BenningImports.ps1`: cyclic import watcher
+- `Scripts/Register-BenningImportWatcherLogonTask.ps1`: Windows logon task registration helper
 - `Scripts/Write-BenningDbToDevice.ps1`: protected write-back to the SD card
 - `Scripts/Print-NewBenningPdfs.ps1`: PDF printing and archiving
 - `Launchers/*.bat`: simple launcher files for desktop shortcuts
@@ -71,6 +72,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Sc
 ```
 
 The watcher runs every `ImportWatcher.PollSeconds` seconds. It starts `Prepare-BenningMerge.ps1` only after the previous cycle has finished. If no removable media or device database is present, the watcher treats that as the normal idle state and checks again in the next cycle. Unchanged device databases are skipped by comparing file metadata first, so the full database file is not hashed every 10 seconds. When a changed database is copied into `Incoming`, the watcher starts BENNING PC-Win if it is not already running. If BENNING PC-Win is already running, it shows a Windows notification with the database file name that is ready to import.
+
+To start the watcher automatically when a specific Windows user logs on, run PowerShell as administrator and register a logon task:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BenningAutomation\Scripts\Register-BenningImportWatcherLogonTask.ps1" -UserId "DOMAIN\UserName"
+```
+
+For Microsoft Entra ID / Azure AD accounts, the user id is often shaped like:
+
+```text
+AzureAD\user@company.com
+```
+
+The task runs only when that user is logged on, so BENNING PC-Win and Windows notifications remain visible in that user's desktop session.
 
 ## Flow 2: Write Test Data To Device
 
