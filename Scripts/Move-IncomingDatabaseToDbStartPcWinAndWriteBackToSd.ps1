@@ -18,7 +18,7 @@ function Wait-ForBenningWorkSession {
         [Parameter(Mandatory = $true)][string]$Path,
         [int]$PollSeconds,
         $Config,
-        [int]$StableReleaseSeconds = 15
+        [int]$StableReleaseSeconds = 1
     )
 
     $hasObservedLock = !(Test-BenningFileAccess -Path $Path -Access "ReadWrite")
