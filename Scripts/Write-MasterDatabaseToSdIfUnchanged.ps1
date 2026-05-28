@@ -39,7 +39,7 @@ try {
     }
 
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $backupFile = Join-Path $paths.Archive ("DeviceDB_before_write_{0}{1}" -f $timestamp, $deviceDb.Extension)
+    $backupFile = Join-Path $paths.Backups ("{0}_sd_before_master_write_{1}" -f $timestamp, $deviceDb.Name)
 
     Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "ReadWrite" -Purpose "device database overwrite"
 
@@ -54,7 +54,7 @@ try {
         ConvertTo-Json -Depth 4 |
         Set-Content -LiteralPath $deviceStateMetadataFile -Encoding UTF8
 
-    Write-BenningLog -Config $config -Message "SD database backup: $backupFile"
+    Write-BenningLog -Config $config -Message "SD database backup before master write: $backupFile"
     Write-BenningLog -Config $config -Message "Master database written to: $($deviceDb.FullName)"
     Write-BenningLog -Config $config -Message "New hash saved: $newHash"
     Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"

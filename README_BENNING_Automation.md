@@ -17,16 +17,16 @@ D:\Device-001.sdf
 C:\PATflow\Incoming\Device-001.sdf
 ```
 
-6. If the SD database is unchanged but the SD card was newly connected, the workflow still copies the SD database directly into `DB` if no working copy exists.
-7. `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` moves the file from `Incoming` to `DB`, or uses/copies the matching SD database when there is no new `Incoming` file.
+6. If the SD database is unchanged but the SD card was newly connected, the workflow still starts PC-Win with the master database in `DB`.
+7. `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` copies the file from `Incoming` to the configured `MasterDbPath`, or uses the existing master database when there is no new `Incoming` file.
 8. BENNING PC-Win is started only after the database file is in `DB`.
 9. The user works on the database in PC-Win.
 10. PATflow waits until PC-Win has locked and then released the database file. If the file is already locked, this is accepted as the active work session.
 11. The original SD-card database is moved to `Archive`.
 12. The changed database from `DB` is copied back to the SD card.
-13. The changed `DB` working file is moved to `Archive`.
+13. A copy of the changed master database is written to `Archive`. The master database itself remains in `DB`.
 
-If new SD data is copied to `Incoming` while a working database with the same name already exists in `DB`, PATflow stops the new import and shows a conflict notification. The current PC-Win workflow must be finished first.
+If new SD data is copied to `Incoming` while the master database is locked by PC-Win, PATflow stops the move-to-DB step and shows a conflict notification. If the master database is not locked, `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1` creates a backup in `Backups` before replacing it with the incoming SD database.
 
 This gives a direct interim workflow while Power Automate Desktop GUI import is not implemented.
 
@@ -40,26 +40,42 @@ This gives a direct interim workflow while Power Automate Desktop GUI import is 
 ## Database Model
 
 - The PC master database remains the leading database conceptually.
+- `MasterDbPath` is a durable file. PATflow never moves it to `Archive`.
 - The SD card is the device working database.
-- Current interim mode works directly on a copied SD database in `DB`.
+- Current interim mode works directly on the configured master database in `DB`.
 - Later PAD mode can still use BENNING's official merge workflow.
 
 ## Important Folders
 
 - `Config`: central configuration
 - `Incoming`: fresh copies from SD, original file names preserved
-- `DB`: active working database for PC-Win
-- `Archive`: archived SD originals and changed PC-Win working databases
-- `Backups`: master database backups for future merge workflow
+- `DB`: durable master database for PC-Win
+- `Backups`: safety copies made before PATflow overwrites an existing database
+- `Archive`: historical copies after completed work, for example SD originals and changed master database snapshots
 - `Logs`: technical log file
 - `State`: hashes and metadata used to skip unchanged databases safely
+
+## Folder Usage Under C:\PATflow
+
+- `Config`: used
+- `DB`: used
+- `Incoming`: used
+- `Backups`: used
+- `Archive`: used
+- `Logs`: used
+- `State`: used
+- `Scripts`: used
+- `Launchers`: used
+- `PDF_Export`: used only by the PDF print watcher
+- `PDF_Archive`: used only by the PDF print watcher
+- `PrintQueue`: used only by the PDF print watcher
 
 ## Main Scripts
 
 - `Shared-BenningAutomationFunctions.ps1`: shared helper functions only. Do not start directly.
 - `Watch-SdCardAndRunDirectDatabaseWorkflow.ps1`: long-running SD-card watcher. Starts the current direct workflow.
-- `Copy-DeviceDatabaseFromSdToIncoming.ps1`: copies a changed SD database to `Incoming`. Does not start PC-Win.
-- `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1`: moves `Incoming` to `DB`, starts PC-Win, waits for release, writes back to SD, archives files.
+- `Copy-DeviceDatabaseFromSdToIncoming.ps1`: copies a changed SD database to `Incoming`. Does not read or back up the master database and does not start PC-Win.
+- `Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1`: copies `Incoming` to `MasterDbPath`, starts PC-Win, waits for release, writes back to SD, archives copies.
 - `Write-MasterDatabaseToSdIfUnchanged.ps1`: protected checkout from master database to SD. Only writes if the SD database still matches the last imported hash.
 - `Watch-PdfExportAndPrintNewPdfs.ps1`: watches exported PDFs and prints/archives them.
 - `PATflow-RegistrationOnLogon.ps1`: registers SD workflow and PDF print watchers as Windows logon tasks for a specific user.
@@ -92,6 +108,8 @@ Check `Config\config.json` before running:
 - `Pdf.PrinterName`
 
 If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
+
+`Write-MasterDatabaseToSdIfUnchanged.ps1` requires `MasterDbPath` to point to an existing master database. The SD import watcher can run without reading that file while copying SD data into `Incoming`; the backup of the existing master database belongs to the later move-to-DB step.
 
 ## Start Watcher
 
@@ -173,5 +191,6 @@ The PDFs remain archived after printing. PATflow does not delete archived PDFs a
 - Unchanged SD databases are handled once when the SD card is newly connected, then skipped during the same SD-card session.
 - Full hashing is only done when metadata indicates a change.
 - Original SD databases are archived before write-back.
+- The master database in `DB` is never moved to `Archive`; only copies are written to `Backups` or `Archive`.
 - If write-back fails after archiving the original SD file, PATflow restores the original file to the SD card.
 - PDF printing keeps exported PDFs in `Pdf.ArchivePath` after printing.

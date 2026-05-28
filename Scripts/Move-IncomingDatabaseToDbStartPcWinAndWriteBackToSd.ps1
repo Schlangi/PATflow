@@ -40,6 +40,19 @@ function Wait-ForBenningWorkSession {
     }
 }
 
+function Get-BenningConfiguredMasterDbPath {
+    param(
+        $Config,
+        [string]$FallbackPath
+    )
+
+    if (![string]::IsNullOrWhiteSpace($Config.MasterDbPath)) {
+        return $Config.MasterDbPath
+    }
+
+    return $FallbackPath
+}
+
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     $paths = Initialize-BenningFolders -Config $config
@@ -84,24 +97,32 @@ try {
         $databaseName = $incomingItem.Name
     }
 
-    $workDbPath = Join-Path $paths.Db $databaseName
+    $workDbPath = Get-BenningConfiguredMasterDbPath -Config $config -FallbackPath (Join-Path $paths.Db $databaseName)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $workDbPath) | Out-Null
     $workDbExists = Test-Path -LiteralPath $workDbPath
 
     if ($incomingItem -and $workDbExists) {
-        $message = "New SD data was copied to Incoming, but a working database already exists in DB. Finish or archive the current PC-Win workflow before importing new SD data. Incoming: $($incomingItem.FullName). Existing DB: $workDbPath"
-        Write-BenningLog -Config $config -Level "ERROR" -Message $message
-        Show-BenningToastNotification -Config $config -Title "PATflow conflict" -Message $message | Out-Null
-        throw $message
+        if (!(Test-BenningFileAccess -Path $workDbPath -Access "ReadWrite")) {
+            $message = "New SD data was copied to Incoming, but the master database is currently locked by PC-Win. Finish the current PC-Win workflow before importing new SD data. Incoming: $($incomingItem.FullName). Master DB: $workDbPath"
+            Write-BenningLog -Config $config -Level "ERROR" -Message $message
+            Show-BenningToastNotification -Config $config -Title "PATflow conflict" -Message $message | Out-Null
+            throw $message
+        }
+
+        $masterBackupPath = Join-Path $paths.Backups ("{0}_master_before_incoming_{1}" -f $timestamp, (Split-Path -Leaf $workDbPath))
+        Copy-Item -LiteralPath $workDbPath -Destination $masterBackupPath -Force
+        Write-BenningLog -Config $config -Message "Master database backup before incoming replacement: $masterBackupPath"
     }
 
     if ($incomingItem) {
-        Move-Item -LiteralPath $incomingItem.FullName -Destination $workDbPath
-        Write-BenningLog -Config $config -Message "Moved incoming database to DB folder: $workDbPath"
+        Copy-Item -LiteralPath $incomingItem.FullName -Destination $workDbPath -Force
+        Remove-Item -LiteralPath $incomingItem.FullName -Force
+        Write-BenningLog -Config $config -Message "Copied incoming database to master DB path and removed incoming copy: $workDbPath"
     } elseif (!$workDbExists) {
         Copy-Item -LiteralPath $sourceItem.FullName -Destination $workDbPath -Force
-        Write-BenningLog -Config $config -Message "Copied unchanged SD database directly to DB folder: $workDbPath"
+        Write-BenningLog -Config $config -Message "Copied unchanged SD database directly to master DB path: $workDbPath"
     } else {
-        Write-BenningLog -Config $config -Message "Using existing working database in DB folder: $workDbPath"
+        Write-BenningLog -Config $config -Message "Using existing master database in DB folder: $workDbPath"
     }
 
     if (Test-BenningProgramRunning -Config $config) {
@@ -119,7 +140,7 @@ try {
     Wait-BenningFileAccess -Config $config -Path $workDbPath -Access "Read" -Purpose "copy changed working database back to SD"
 
     $archiveOriginalPath = Join-Path $paths.Archive ("{0}_sd_original_{1}" -f $timestamp, $sourceItem.Name)
-    $archiveChangedPath = Join-Path $paths.Archive ("{0}_pcwin_changed_{1}" -f $timestamp, $databaseName)
+    $archiveChangedPath = Join-Path $paths.Archive ("{0}_pcwin_changed_{1}" -f $timestamp, (Split-Path -Leaf $workDbPath))
 
     $originalMovedToArchive = $false
     try {
@@ -127,7 +148,7 @@ try {
         $originalMovedToArchive = $true
 
         Copy-Item -LiteralPath $workDbPath -Destination $SourceDeviceDbPath -Force
-        Move-Item -LiteralPath $workDbPath -Destination $archiveChangedPath -Force
+        Copy-Item -LiteralPath $workDbPath -Destination $archiveChangedPath -Force
     } catch {
         if ($originalMovedToArchive -and !(Test-Path -LiteralPath $SourceDeviceDbPath) -and (Test-Path -LiteralPath $archiveOriginalPath)) {
             Copy-Item -LiteralPath $archiveOriginalPath -Destination $SourceDeviceDbPath -Force
@@ -148,7 +169,7 @@ try {
 
     Write-BenningLog -Config $config -Message "Archived original SD database: $archiveOriginalPath"
     Write-BenningLog -Config $config -Message "Copied changed database back to SD: $SourceDeviceDbPath"
-    Write-BenningLog -Config $config -Message "Archived changed working database: $archiveChangedPath"
+    Write-BenningLog -Config $config -Message "Archived changed master database copy: $archiveChangedPath"
     Show-BenningToastNotification -Config $config -Title "BENNING database written back" -Message "Updated database was copied back to SD: $($sourceItem.Name)" | Out-Null
 
     if ($Json) {

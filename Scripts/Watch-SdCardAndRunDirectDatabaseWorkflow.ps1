@@ -25,12 +25,23 @@ function Invoke-BenningPrepareOnce {
         $arguments += @("-ConfigPath", $ConfigPath)
     }
 
-    $output = & powershell.exe @arguments
-    if (!$output) {
+    $output = & powershell.exe @arguments 2>&1
+    $exitCode = $LASTEXITCODE
+    $outputText = (($output | ForEach-Object { $_.ToString() }) -join "`n").Trim()
+
+    if ($exitCode -ne 0) {
+        throw "Prepare script failed with exit code $exitCode. Output: $outputText"
+    }
+
+    if (!$outputText) {
         return $null
     }
 
-    return ($output | Out-String | ConvertFrom-Json)
+    try {
+        return ($outputText | ConvertFrom-Json)
+    } catch {
+        throw "Prepare script did not return valid JSON. Output: $outputText"
+    }
 }
 
 function Invoke-BenningIncomingProcessor {
@@ -62,6 +73,13 @@ function Invoke-BenningIncomingProcessor {
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
+    $watcherMutexCreated = $false
+    $watcherMutex = [System.Threading.Mutex]::new($true, "Local\PATflowBenningSdWatcher", [ref]$watcherMutexCreated)
+    if (!$watcherMutexCreated) {
+        Write-BenningLog -Config $config -Level "WARN" -Message "SD card workflow watcher is already running. Exiting duplicate watcher instance."
+        return
+    }
+
     $pollSeconds = Get-ImportWatcherPollSeconds -Config $config
     $handledDeviceNames = @{}
     $handledChangedHashes = @{}
@@ -133,4 +151,9 @@ try {
     }
 
     throw
+} finally {
+    if ($watcherMutexCreated -and $watcherMutex) {
+        $watcherMutex.ReleaseMutex()
+        $watcherMutex.Dispose()
+    }
 }
