@@ -150,10 +150,13 @@ try {
         Set-BenningStatus -Config $config -Workflow "Database" -State "CopyingDatabaseToSdCard" -Message "Copying database to SD card. Please wait."
         Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Kopiere Datenbank auf SD Karte, bitte warten!"
         $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "direct workflow write-back to SD: $SourceDeviceDbPath"
+        Write-BenningLog -Config $config -Message "Write-back phase: archive original SD database. Source: $SourceDeviceDbPath Target: $archiveOriginalPath"
         Copy-BenningFile -Config $config -SourcePath $SourceDeviceDbPath -DestinationPath $archiveOriginalPath -Purpose "original SD database archive copy"
         $originalMovedToArchive = $true
 
+        Write-BenningLog -Config $config -Message "Write-back phase: copy changed master database to SD. Source: $workDbPath Target: $SourceDeviceDbPath"
         Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $SourceDeviceDbPath -Purpose "changed master database write-back to SD"
+        Write-BenningLog -Config $config -Message "Write-back phase: archive changed master database. Source: $workDbPath Target: $archiveChangedPath"
         Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $archiveChangedPath -Purpose "changed master database archive copy"
     } catch {
         if ($originalMovedToArchive -and !(Test-Path -LiteralPath $SourceDeviceDbPath) -and (Test-Path -LiteralPath $archiveOriginalPath)) {
@@ -191,6 +194,8 @@ try {
 } catch {
     if ($config) {
         Write-BenningLog -Config $config -Level "ERROR" -Message "Incoming database processing failed: $($_.Exception.Message)"
+        Write-BenningLog -Config $config -Level "ERROR" -Message "Incoming database processing failure type: $($_.Exception.GetType().FullName)"
+        Write-BenningLog -Config $config -Level "ERROR" -Message "Incoming database processing stack trace: $($_.ScriptStackTrace)"
         Set-BenningStatus -Config $config -Workflow "Database" -State "Error" -Message "Database processing failed." -ErrorMessage $_.Exception.Message
         Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Fehler im Datenbank-Workflow. Details stehen im Log." -Error
     }

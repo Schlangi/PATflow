@@ -70,6 +70,17 @@ function Invoke-BenningIncomingProcessor {
     Start-Process -FilePath "powershell.exe" -ArgumentList ($arguments -join " ") -WindowStyle Hidden
 }
 
+function Wait-BenningImportWatcherPoll {
+    param(
+        [switch]$Once,
+        [int]$PollSeconds
+    )
+
+    if (!$Once) {
+        Start-Sleep -Seconds $PollSeconds
+    }
+}
+
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
@@ -98,10 +109,7 @@ try {
         try {
             if (Test-BenningSdWriteInProgress -Config $config) {
                 Write-BenningLog -Config $config -Message "SD write is in progress, skipping watcher cycle."
-                if (!$Once) {
-                    Start-Sleep -Seconds $pollSeconds
-                }
-
+                Wait-BenningImportWatcherPoll -Once:$Once -PollSeconds $pollSeconds
                 continue
             }
 
@@ -116,6 +124,7 @@ try {
                     $waitingForSdNotified = $true
                 }
 
+                Wait-BenningImportWatcherPoll -Once:$Once -PollSeconds $pollSeconds
                 continue
             }
 
@@ -127,15 +136,18 @@ try {
                 if ($result.Changed) {
                     if ($resultHash -and $handledChangedHashes.ContainsKey($fileName) -and $handledChangedHashes[$fileName] -eq $resultHash) {
                         Write-BenningLog -Config $config -Message "Changed database was already handed to the direct workflow during this SD session, skipping cycle: $fileName"
+                        Wait-BenningImportWatcherPoll -Once:$Once -PollSeconds $pollSeconds
                         continue
                     }
                 } elseif ($handledDeviceNames.ContainsKey($fileName)) {
                     Write-BenningLog -Config $config -Message "Unchanged database was already handled during this SD session, skipping cycle: $fileName"
+                    Wait-BenningImportWatcherPoll -Once:$Once -PollSeconds $pollSeconds
                     continue
                 }
 
                 if (Test-BenningDirectWorkflowRunning -Config $config -DeviceDatabaseName $fileName) {
                     Write-BenningLog -Config $config -Message "Direct workflow already running for database, skipping cycle: $fileName"
+                    Wait-BenningImportWatcherPoll -Once:$Once -PollSeconds $pollSeconds
                     continue
                 }
 
