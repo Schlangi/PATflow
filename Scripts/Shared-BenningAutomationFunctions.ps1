@@ -159,16 +159,6 @@ function Test-BenningSdWriteInProgress {
     return $true
 }
 
-function Test-BenningExplorerCopyProgressEnabled {
-    param($Config)
-
-    if ($Config.Ui -and $null -ne $Config.Ui.ShowCopyProgressWindow) {
-        return [bool]$Config.Ui.ShowCopyProgressWindow
-    }
-
-    return $true
-}
-
 function Copy-BenningFile {
     param(
         [Parameter(Mandatory = $true)][string]$SourcePath,
@@ -181,42 +171,24 @@ function Copy-BenningFile {
     $destinationFolder = Split-Path -Parent $DestinationPath
     New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
 
-    $tempFolder = Join-Path $destinationFolder (".patflow_copy_{0}" -f ([guid]::NewGuid().ToString("N")))
-    $copyDestinationPath = Join-Path $tempFolder $sourceItem.Name
-    New-Item -ItemType Directory -Force -Path $tempFolder | Out-Null
+    $destinationName = Split-Path -Leaf $DestinationPath
+    $copyDestinationPath = Join-Path $destinationFolder (".patflow_copy_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName)
+    $replaceBackupPath = Join-Path $destinationFolder (".patflow_replace_backup_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName)
 
-    if (Test-BenningExplorerCopyProgressEnabled -Config $Config) {
-        try {
-            $shell = New-Object -ComObject Shell.Application
-            $folder = $shell.Namespace($tempFolder)
-            if (!$folder) {
-                throw "Temporary destination folder could not be opened by Windows Shell: $tempFolder"
-            }
-
-            Write-BenningLog -Config $Config -Message "Starting Windows Explorer copy for ${Purpose}: $SourcePath -> $copyDestinationPath"
-            $folder.CopyHere($sourceItem.FullName, 16)
-
-            $deadline = (Get-Date).AddMinutes(30)
-            do {
-                Start-Sleep -Milliseconds 500
-                $destinationItem = Get-Item -LiteralPath $copyDestinationPath -ErrorAction SilentlyContinue
-                if ($destinationItem -and $destinationItem.Length -eq $sourceItem.Length -and (Test-BenningFileAccess -Path $copyDestinationPath -Access "Read")) {
-                    Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
-                    Remove-Item -LiteralPath $tempFolder -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-BenningLog -Config $Config -Message "Windows Explorer copy finished for ${Purpose}: $DestinationPath"
-                    return
-                }
-            } while ((Get-Date) -lt $deadline)
-
-            throw "Windows Explorer copy timed out during ${Purpose}: $DestinationPath"
-        } catch {
-            Write-BenningLog -Config $Config -Level "WARN" -Message "Windows Explorer copy failed during ${Purpose}, falling back to Copy-Item: $($_.Exception.Message)"
-        }
-    }
-
+    Write-BenningLog -Config $Config -Message "Copying file for ${Purpose}: $SourcePath -> $copyDestinationPath"
     Copy-Item -LiteralPath $SourcePath -Destination $copyDestinationPath -Force
-    Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
-    Remove-Item -LiteralPath $tempFolder -Recurse -Force -ErrorAction SilentlyContinue
+
+    try {
+        if (Test-Path -LiteralPath $DestinationPath) {
+            [System.IO.File]::Replace($copyDestinationPath, $DestinationPath, $replaceBackupPath, $true)
+            Remove-Item -LiteralPath $replaceBackupPath -Force -ErrorAction SilentlyContinue
+        } else {
+            Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
+        }
+    } catch {
+        Remove-Item -LiteralPath $copyDestinationPath -Force -ErrorAction SilentlyContinue
+        throw
+    }
 
     Write-BenningLog -Config $Config -Message "File copied for ${Purpose}: $SourcePath -> $DestinationPath"
 }
@@ -276,38 +248,12 @@ function Show-BenningMessage {
         $Config
     )
 
-    if (!$Config.Ui.ShowMessageBox) {
-        return
+    $title = $Config.Ui.MessageTitle
+    if ([string]::IsNullOrWhiteSpace($title)) {
+        $title = "PATflow BENNING Automation"
     }
 
-    Add-Type -AssemblyName PresentationFramework
-    $messageIcon = [System.Enum]::Parse([System.Windows.MessageBoxImage], $Icon)
-    $owner = New-Object System.Windows.Window
-    $owner.Topmost = $true
-    $owner.ShowInTaskbar = $false
-    $owner.WindowStyle = "None"
-    $owner.Width = 0
-    $owner.Height = 0
-    $owner.Left = -32000
-    $owner.Top = -32000
-    $owner.Show()
-    try {
-        [System.Windows.MessageBox]::Show(
-            $owner,
-            $Message,
-            $Config.Ui.MessageTitle,
-            [System.Windows.MessageBoxButton]::OK,
-            $messageIcon
-        ) | Out-Null
-    } finally {
-        $owner.Close()
-    }
-}
-
-function Escape-BenningXmlText {
-    param([AllowNull()][string]$Text)
-
-    return [System.Security.SecurityElement]::Escape($Text)
+    Show-BenningToastNotification -Config $Config -Title $title -Message $Message | Out-Null
 }
 
 function Show-BenningToastNotification {
@@ -318,34 +264,16 @@ function Show-BenningToastNotification {
     )
 
     try {
-        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-
-        $appId = $Config.Ui.MessageTitle
-        if ([string]::IsNullOrWhiteSpace($appId)) {
-            $appId = "PATflow BENNING Automation"
+        if (!(Get-Module -ListAvailable -Name BurntToast | Select-Object -First 1)) {
+            throw "PowerShell module BurntToast is not installed."
         }
 
-        $xmlText = @"
-<toast>
-  <visual>
-    <binding template="ToastGeneric">
-      <text>$(Escape-BenningXmlText -Text $Title)</text>
-      <text>$(Escape-BenningXmlText -Text $Message)</text>
-    </binding>
-  </visual>
-</toast>
-"@
-
-        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-        $xml.LoadXml($xmlText)
-        $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
-        Write-BenningLog -Config $Config -Message "Toast notification shown: $Title - $Message"
+        Import-Module BurntToast -ErrorAction Stop
+        New-BurntToastNotification -Text $Title, $Message -Silent -ErrorAction Stop
+        Write-BenningLog -Config $Config -Message "BurntToast notification shown: $Title - $Message"
         return $true
     } catch {
-        Write-BenningLog -Config $Config -Level "WARN" -Message "Toast notification failed: $($_.Exception.Message)"
-        Show-BenningMessage -Config $Config -Icon "Information" -Message "$Title`n`n$Message"
+        Write-BenningLog -Config $Config -Level "WARN" -Message "BurntToast notification failed: $($_.Exception.Message). Notification text: $Title - $Message"
         return $false
     }
 }

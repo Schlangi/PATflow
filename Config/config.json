@@ -42,7 +42,6 @@
   },
   "Ui": {
     "ShowMessageBox": true,
-    "ShowCopyProgressWindow": true,
     "MessageTitle": "BENNING Automation"
   }
 }

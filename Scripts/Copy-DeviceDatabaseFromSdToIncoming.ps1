@@ -13,6 +13,20 @@ try {
     $paths = Initialize-BenningFolders -Config $config
     Write-BenningLog -Config $config -Message "Starting BENNING merge preparation"
 
+    if (Test-BenningSdWriteInProgress -Config $config) {
+        Write-BenningLog -Config $config -Message "SD write is in progress, skipping device database copy."
+        if ($Json) {
+            [pscustomobject]@{
+                Success = $true
+                Changed = $false
+                SdWriteInProgress = $true
+                Message = "SD write is in progress."
+            } | ConvertTo-Json -Depth 4
+        }
+
+        return
+    }
+
     $deviceDb = Find-BenningDeviceDatabase -Config $config
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
@@ -50,6 +64,20 @@ try {
     }
 
     $hash = Get-BenningFileHash -Path $deviceDb.FullName
+
+    if (Test-BenningSdWriteInProgress -Config $config) {
+        Write-BenningLog -Config $config -Message "SD write started while preparing copy, skipping device database copy."
+        if ($Json) {
+            [pscustomobject]@{
+                Success = $true
+                Changed = $false
+                SdWriteInProgress = $true
+                Message = "SD write started while preparing copy."
+            } | ConvertTo-Json -Depth 4
+        }
+
+        return
+    }
 
     if ($SkipUnchanged -and (Test-Path -LiteralPath $deviceStateHashFile)) {
         $previousHash = (Get-Content -LiteralPath $deviceStateHashFile -ErrorAction Stop | Select-Object -First 1).Trim()

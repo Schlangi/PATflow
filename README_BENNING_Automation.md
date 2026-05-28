@@ -106,13 +106,14 @@ Check `Config\config.json` before running:
 - `Pdf.ArchivePath`
 - `Pdf.QueuePath`
 - `Pdf.PrinterName`
-- `Ui.ShowCopyProgressWindow`
 
 If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
 
 `Write-MasterDatabaseToSdIfUnchanged.ps1` requires `MasterDbPath` to point to an existing master database. The SD import watcher can run without reading that file while copying SD data into `Incoming`; the backup of the existing master database belongs to the later move-to-DB step.
 
-When `Ui.ShowCopyProgressWindow` is `true`, PATflow uses Windows Explorer copy dialogs for file copies. Existing destination files are replaced through a temporary copy first, so a failed copy should not immediately remove the previous destination file.
+Notifications use the PowerShell module `BurntToast`. PATflow logs a warning if the module is missing.
+
+PATflow copies to temporary files in the destination folder and then replaces the final destination only after the temporary copy is complete. This is intentionally safer than Windows Explorer copy dialogs for existing database files.
 
 ## Start Watcher
 

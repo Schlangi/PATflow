@@ -11,6 +11,7 @@ try {
     $paths = Initialize-BenningFolders -Config $config
     $sdWriteLockPath = $null
     Write-BenningLog -Config $config -Message "Starting master database write to SD card"
+    $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "master database write to SD"
 
     $masterDb = Assert-BenningMasterDb -Config $config
     $deviceDb = Find-BenningDeviceDatabase -Config $config
@@ -44,7 +45,6 @@ try {
 
     Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "ReadWrite" -Purpose "device database overwrite"
 
-    $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "master database write to SD: $($deviceDb.FullName)"
     Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $backupFile -Purpose "SD database backup before master write"
     Copy-BenningFile -Config $config -SourcePath $masterDb.FullName -DestinationPath $deviceDb.FullName -Purpose "master database write to SD"
 

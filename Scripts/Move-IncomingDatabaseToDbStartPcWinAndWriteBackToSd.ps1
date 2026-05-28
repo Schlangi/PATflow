@@ -147,7 +147,6 @@ try {
     try {
         $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "direct workflow write-back to SD: $SourceDeviceDbPath"
         Copy-BenningFile -Config $config -SourcePath $SourceDeviceDbPath -DestinationPath $archiveOriginalPath -Purpose "original SD database archive copy"
-        Remove-Item -LiteralPath $SourceDeviceDbPath -Force
         $originalMovedToArchive = $true
 
         Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $SourceDeviceDbPath -Purpose "changed master database write-back to SD"
