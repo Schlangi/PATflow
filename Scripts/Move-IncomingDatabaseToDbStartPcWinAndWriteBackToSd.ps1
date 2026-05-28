@@ -107,7 +107,7 @@ try {
             $message = "New SD data was copied to Incoming, but the master database is currently locked by PC-Win. Finish the current PC-Win workflow before importing new SD data. Incoming: $($incomingItem.FullName). Master DB: $workDbPath"
             Write-BenningLog -Config $config -Level "ERROR" -Message $message
             Set-BenningStatus -Config $config -Workflow "Database" -State "Error" -Message "New SD data cannot be imported because the master database is locked." -ErrorMessage $message
-            Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Neue SD-Daten wurden gefunden, aber PC-Win sperrt die Datenbank. Bitte PC-Win zuerst schließen." -Error
+            Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Neue SD-Daten wurden gefunden, aber PC-Win sperrt die Datenbank. Bitte PC-Win zuerst schlie\u00dfen." -Error
             throw $message
         }
 
@@ -136,7 +136,7 @@ try {
     }
 
     Set-BenningStatus -Config $config -Workflow "Database" -State "WaitingForChangedDatabase" -Message "Waiting for changed database."
-    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Warte auf geänderte Datenbank"
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Warte auf ge\u00e4nderte Datenbank"
     Wait-ForBenningWorkSession -Path $workDbPath -PollSeconds $PollSeconds -Config $config
 
     Wait-BenningFileAccess -Config $config -Path $SourceDeviceDbPath -Access "ReadWrite" -Purpose "archive original SD database"
@@ -177,7 +177,7 @@ try {
     Write-BenningLog -Config $config -Message "Copied changed database back to SD: $SourceDeviceDbPath"
     Write-BenningLog -Config $config -Message "Archived changed master database copy: $archiveChangedPath"
     Set-BenningStatus -Config $config -Workflow "Database" -State "DatabaseWrittenToSdCard" -Message "Database successfully written to SD card. Safely eject the device itself."
-    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Datenbank erfolgreich auf SD Karte geschrieben, Gerät selbst sicher entfernen!"
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Datenbank erfolgreich auf SD Karte geschrieben, Ger\u00e4t selbst sicher entfernen!"
 
     if ($Json) {
         [pscustomobject]@{

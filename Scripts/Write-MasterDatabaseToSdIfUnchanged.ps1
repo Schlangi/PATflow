@@ -64,7 +64,7 @@ try {
     Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
     Write-BenningLog -Config $config -Message "Device-specific metadata file: $deviceStateMetadataFile"
     Set-BenningStatus -Config $config -Workflow "Database" -State "DatabaseWrittenToSdCard" -Message "Database successfully written to SD card. Safely eject the device itself."
-    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Datenbank erfolgreich auf SD Karte geschrieben, Gerät selbst sicher entfernen!"
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Datenbank erfolgreich auf SD Karte geschrieben, Ger\u00e4t selbst sicher entfernen!"
 
     if ($Json) {
         [pscustomobject]@{

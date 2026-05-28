@@ -247,6 +247,19 @@ function Show-PatflowWorkflowToast {
     Show-BenningToastNotification -Config $Config -Title $Title -Message $Message -UniqueIdentifier $identifier | Out-Null
 }
 
+function ConvertFrom-BenningEscapedText {
+    param([string]$Text)
+
+    if ($null -eq $Text) {
+        return $null
+    }
+
+    return [regex]::Replace($Text, "\\u([0-9a-fA-F]{4})", {
+        param($Match)
+        return [string][char][Convert]::ToInt32($Match.Groups[1].Value, 16)
+    })
+}
+
 function Start-BenningSdWriteLock {
     param(
         $Config,
@@ -307,8 +320,8 @@ function Copy-BenningFile {
     New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
 
     $destinationName = Split-Path -Leaf $DestinationPath
-    $copyDestinationName = ".patflow_copy_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
-    $replaceBackupName = ".patflow_replace_backup_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
+    $copyDestinationName = "PATFLOW_COPY_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
+    $replaceBackupName = "PATFLOW_REPLACE_BACKUP_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
     $copyDestinationPath = Join-Path $destinationFolder $copyDestinationName
     $replaceBackupPath = Join-Path $destinationFolder $replaceBackupName
 
@@ -379,10 +392,42 @@ function Write-BenningLog {
         $Config
     )
 
-    $paths = Get-BenningPaths -Config $Config
-    New-Item -ItemType Directory -Force -Path $paths.Logs | Out-Null
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    "$ts`t$Level`t$Message" | Add-Content -LiteralPath $paths.LogFile -Encoding UTF8
+    try {
+        $paths = Get-BenningPaths -Config $Config
+        New-Item -ItemType Directory -Force -Path $paths.Logs | Out-Null
+        $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $line = "$ts`t$Level`t$Message"
+
+        $logMutex = $null
+        $logMutexTaken = $false
+        try {
+            try {
+                $logMutex = [System.Threading.Mutex]::new($false, "Global\PATflowLogFile")
+            } catch {
+                $logMutex = [System.Threading.Mutex]::new($false, "Local\PATflowLogFile")
+            }
+
+            $logMutexTaken = $logMutex.WaitOne([TimeSpan]::FromSeconds(3))
+            for ($attempt = 1; $attempt -le 10; $attempt++) {
+                try {
+                    $line | Add-Content -LiteralPath $paths.LogFile -Encoding UTF8
+                    return
+                } catch {
+                    Start-Sleep -Milliseconds 150
+                }
+            }
+        } finally {
+            if ($logMutexTaken -and $logMutex) {
+                $logMutex.ReleaseMutex()
+            }
+
+            if ($logMutex) {
+                $logMutex.Dispose()
+            }
+        }
+    } catch {
+        return
+    }
 }
 
 function Show-BenningMessage {
@@ -409,6 +454,9 @@ function Show-BenningToastNotification {
     )
 
     try {
+        $Title = ConvertFrom-BenningEscapedText -Text $Title
+        $Message = ConvertFrom-BenningEscapedText -Text $Message
+
         if (!(Get-Module -ListAvailable -Name BurntToast | Select-Object -First 1)) {
             throw "PowerShell module BurntToast is not installed."
         }

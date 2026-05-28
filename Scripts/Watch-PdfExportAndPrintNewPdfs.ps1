@@ -72,7 +72,7 @@ try {
             $pdfBatchSignature = (@($pdfs) | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join ";;"
             if ($pdfBatchSignature -ne $lastPdfBatchSignature) {
                 Set-BenningStatus -Config $config -Workflow "Pdf" -State "PrintingStarted" -Message ("Print started for {0} file(s)." -f $pdfCount)
-                Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck" -Message ("Druck für {0} Dateien gestartet" -f $pdfCount)
+                Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck" -Message ("Druck f\u00fcr {0} Dateien gestartet" -f $pdfCount)
                 $lastPdfBatchSignature = $pdfBatchSignature
             }
 

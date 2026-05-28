@@ -153,6 +153,8 @@ try {
                 Write-BenningLog -Config $config -Message $message
 
                 if (Test-BenningConfigSwitch -Value $config.ImportWatcher.ProcessIncomingDirectly -Default $true) {
+                    Set-BenningStatus -Config $config -Workflow "Database" -State "StartingPcWin" -Message "Starting PC-Win."
+                    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Starte PC Win"
                     Invoke-BenningIncomingProcessor -ConfigPath $config.ConfigPath -PrepareResult $result
                 } elseif (Test-BenningProgramRunning -Config $config) {
                     if (Test-BenningConfigSwitch -Value $config.ImportWatcher.NotifyWhenBenningIsAlreadyRunning -Default $true) {
