@@ -98,6 +98,9 @@ try {
         }
     }
 
+    Set-BenningStatus -Config $config -Workflow "Database" -State "CopyingDatabaseFromSdCard" -Message "Copying database from SD card."
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Kopiere Datenbank von SD Karte"
+
     Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $incomingFile -Purpose "device database import copy"
     Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $archiveFile -Purpose "device database archive copy"
 
@@ -146,9 +149,8 @@ try {
         }
 
         Write-BenningLog -Config $config -Level "ERROR" -Message $_.Exception.Message
-        if (!$SuppressErrorMessage) {
-            Show-BenningMessage -Config $config -Icon "Error" -Message "BENNING result import could not be prepared.`nPlease do not perform any further tests.`n`nError log: $((Get-BenningPaths -Config $config).LogFile)"
-        }
+        Set-BenningStatus -Config $config -Workflow "Database" -State "Error" -Message "Database preparation failed." -ErrorMessage $_.Exception.Message
+        Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Fehler beim Kopieren von der SD-Karte. Details stehen im Log." -Error
     }
 
     throw

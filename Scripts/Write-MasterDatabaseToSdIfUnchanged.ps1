@@ -12,6 +12,8 @@ try {
     $sdWriteLockPath = $null
     Write-BenningLog -Config $config -Message "Starting master database write to SD card"
     $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "master database write to SD"
+    Set-BenningStatus -Config $config -Workflow "Database" -State "CopyingDatabaseToSdCard" -Message "Copying database to SD card. Please wait."
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Kopiere Datenbank auf SD Karte, bitte warten!"
 
     $masterDb = Assert-BenningMasterDb -Config $config
     $deviceDb = Find-BenningDeviceDatabase -Config $config
@@ -61,8 +63,8 @@ try {
     Write-BenningLog -Config $config -Message "New hash saved: $newHash"
     Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
     Write-BenningLog -Config $config -Message "Device-specific metadata file: $deviceStateMetadataFile"
-    Show-BenningToastNotification -Config $config -Title "BENNING SD card updated" -Message "Test data was successfully written to the device: $($deviceDb.Name)" | Out-Null
-    Show-BenningMessage -Config $config -Icon "Information" -Message "Test data was successfully written to the device."
+    Set-BenningStatus -Config $config -Workflow "Database" -State "DatabaseWrittenToSdCard" -Message "Database successfully written to SD card. Safely eject the device itself."
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Datenbank erfolgreich auf SD Karte geschrieben, Gerät selbst sicher entfernen!"
 
     if ($Json) {
         [pscustomobject]@{
@@ -79,7 +81,8 @@ try {
 } catch {
     if ($config) {
         Write-BenningLog -Config $config -Level "ERROR" -Message $_.Exception.Message
-        Show-BenningMessage -Config $config -Icon "Error" -Message "BENNING test data could not be written to the device.`n`n$($_.Exception.Message)`n`nError log: $($paths.LogFile)"
+        Set-BenningStatus -Config $config -Workflow "Database" -State "Error" -Message "Master database write to SD card failed." -ErrorMessage $_.Exception.Message
+        Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Fehler beim Schreiben auf die SD-Karte. Details stehen im Log." -Error
     }
 
     throw

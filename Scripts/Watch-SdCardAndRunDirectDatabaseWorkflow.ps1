@@ -74,7 +74,12 @@ try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
     $watcherMutexCreated = $false
-    $watcherMutex = [System.Threading.Mutex]::new($true, "Local\PATflowBenningSdWatcher", [ref]$watcherMutexCreated)
+    try {
+        $watcherMutex = [System.Threading.Mutex]::new($true, "Global\PATflowBenningSdWatcher", [ref]$watcherMutexCreated)
+    } catch {
+        Write-BenningLog -Config $config -Level "WARN" -Message "Global SD watcher mutex could not be created, falling back to local mutex: $($_.Exception.Message)"
+        $watcherMutex = [System.Threading.Mutex]::new($true, "Local\PATflowBenningSdWatcher", [ref]$watcherMutexCreated)
+    }
     if (!$watcherMutexCreated) {
         Write-BenningLog -Config $config -Level "WARN" -Message "SD card workflow watcher is already running. Exiting duplicate watcher instance."
         return
@@ -83,7 +88,11 @@ try {
     $pollSeconds = Get-ImportWatcherPollSeconds -Config $config
     $handledDeviceNames = @{}
     $handledChangedHashes = @{}
+    $waitingForSdNotified = $false
     Write-BenningLog -Config $config -Message "Starting BENNING import watcher. Poll seconds: $pollSeconds"
+    Set-BenningStatus -Config $config -Workflow "Database" -State "WaitingForSdCard" -Message "Waiting for SD card."
+    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Warte auf SD Karte"
+    $waitingForSdNotified = $true
 
     do {
         try {
@@ -101,10 +110,17 @@ try {
             if ($result -and $result.NoDeviceDatabase) {
                 $handledDeviceNames.Clear()
                 $handledChangedHashes.Clear()
+                if (!$waitingForSdNotified) {
+                    Set-BenningStatus -Config $config -Workflow "Database" -State "WaitingForSdCard" -Message "Waiting for SD card."
+                    Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Warte auf SD Karte"
+                    $waitingForSdNotified = $true
+                }
+
                 continue
             }
 
             if ($result -and $result.Success -and $result.SourceDeviceDbPath) {
+                $waitingForSdNotified = $false
                 $fileName = Split-Path -Leaf $result.SourceDeviceDbPath
                 $resultHash = [string]$result.Hash
 
@@ -140,7 +156,7 @@ try {
                     Invoke-BenningIncomingProcessor -ConfigPath $config.ConfigPath -PrepareResult $result
                 } elseif (Test-BenningProgramRunning -Config $config) {
                     if (Test-BenningConfigSwitch -Value $config.ImportWatcher.NotifyWhenBenningIsAlreadyRunning -Default $true) {
-                        Show-BenningToastNotification -Config $config -Title "BENNING import required" -Message $message | Out-Null
+                        Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message ("Neue Daten zum Importieren gefunden: {0}" -f $fileName)
                     }
                 } elseif (Test-BenningConfigSwitch -Value $config.ImportWatcher.StartBenningWhenNewDataArrives -Default $true) {
                     Start-BenningProgram -Config $config
@@ -148,6 +164,8 @@ try {
             }
         } catch {
             Write-BenningLog -Config $config -Level "ERROR" -Message "Import watcher cycle failed: $($_.Exception.Message)"
+            Set-BenningStatus -Config $config -Workflow "Database" -State "Error" -Message "Database watcher cycle failed." -ErrorMessage $_.Exception.Message
+            Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung Fehler" -Message "Fehler im Datenbank-Watcher. Details stehen im Log." -Error
         }
 
         if (!$Once) {

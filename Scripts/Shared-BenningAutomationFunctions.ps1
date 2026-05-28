@@ -112,6 +112,141 @@ function Get-BenningSdWriteLockPath {
     return Join-Path $paths.State "sd_write_in_progress.lock"
 }
 
+function Get-BenningStatusPath {
+    param($Config)
+
+    $paths = Get-BenningPaths -Config $Config
+    return Join-Path $paths.State "status.json"
+}
+
+function Get-EmptyBenningStatus {
+    return [pscustomobject]@{
+        UpdatedAt = $null
+        DatabaseWorkflow = [pscustomobject]@{
+            State = "Unknown"
+            Message = ""
+            UpdatedAt = $null
+        }
+        PdfWorkflow = [pscustomobject]@{
+            State = "Unknown"
+            Message = ""
+            UpdatedAt = $null
+        }
+        LastError = $null
+    }
+}
+
+function Get-BenningStatus {
+    param($Config)
+
+    $statusPath = Get-BenningStatusPath -Config $Config
+    if (!(Test-Path -LiteralPath $statusPath)) {
+        return Get-EmptyBenningStatus
+    }
+
+    try {
+        $status = Get-Content -LiteralPath $statusPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        return Get-EmptyBenningStatus
+    }
+
+    if (!$status.DatabaseWorkflow) {
+        $status | Add-Member -NotePropertyName DatabaseWorkflow -NotePropertyValue (Get-EmptyBenningStatus).DatabaseWorkflow -Force
+    }
+
+    if (!$status.PdfWorkflow) {
+        $status | Add-Member -NotePropertyName PdfWorkflow -NotePropertyValue (Get-EmptyBenningStatus).PdfWorkflow -Force
+    }
+
+    if ($null -eq $status.PSObject.Properties["LastError"]) {
+        $status | Add-Member -NotePropertyName LastError -NotePropertyValue $null -Force
+    }
+
+    return $status
+}
+
+function Set-BenningStatus {
+    param(
+        $Config,
+        [ValidateSet("Database", "Pdf")][string]$Workflow,
+        [Parameter(Mandatory = $true)][string]$State,
+        [Parameter(Mandatory = $true)][string]$Message,
+        [string]$ErrorMessage
+    )
+
+    $statusMutex = $null
+    $statusMutexTaken = $false
+    try {
+        try {
+            $statusMutex = [System.Threading.Mutex]::new($false, "Global\PATflowStatusJson")
+        } catch {
+            $statusMutex = [System.Threading.Mutex]::new($false, "Local\PATflowStatusJson")
+        }
+
+        $statusMutexTaken = $statusMutex.WaitOne([TimeSpan]::FromSeconds(5))
+        if (!$statusMutexTaken) {
+            throw "Timed out waiting for PATflow status.json lock."
+        }
+
+        $status = Get-BenningStatus -Config $Config
+        $now = Get-Date -Format o
+        $status.UpdatedAt = $now
+
+        $entry = [pscustomobject]@{
+            State = $State
+            Message = $Message
+            UpdatedAt = $now
+        }
+
+        if ($Workflow -eq "Database") {
+            $status.DatabaseWorkflow = $entry
+        } else {
+            $status.PdfWorkflow = $entry
+        }
+
+        if (![string]::IsNullOrWhiteSpace($ErrorMessage)) {
+            $status.LastError = [pscustomobject]@{
+                Workflow = $Workflow
+                State = $State
+                Message = $ErrorMessage
+                OccurredAt = $now
+            }
+        }
+
+        $statusPath = Get-BenningStatusPath -Config $Config
+        $statusFolder = Split-Path -Parent $statusPath
+        New-Item -ItemType Directory -Force -Path $statusFolder | Out-Null
+        $statusTempPath = Join-Path $statusFolder (".patflow_status_{0}.tmp" -f ([guid]::NewGuid().ToString("N")))
+        $status | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statusTempPath -Encoding UTF8
+        Move-Item -LiteralPath $statusTempPath -Destination $statusPath -Force
+    } finally {
+        if ($statusMutexTaken -and $statusMutex) {
+            $statusMutex.ReleaseMutex()
+        }
+
+        if ($statusMutex) {
+            $statusMutex.Dispose()
+        }
+    }
+}
+
+function Show-PatflowWorkflowToast {
+    param(
+        $Config,
+        [ValidateSet("Database", "Pdf")][string]$Workflow,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$Error
+    )
+
+    $identifier = "PATflow-$Workflow"
+    if ($Error) {
+        $identifier = "PATflow-$Workflow-Error-$([guid]::NewGuid().ToString("N"))"
+    }
+
+    Show-BenningToastNotification -Config $Config -Title $Title -Message $Message -UniqueIdentifier $identifier | Out-Null
+}
+
 function Start-BenningSdWriteLock {
     param(
         $Config,
@@ -172,20 +307,29 @@ function Copy-BenningFile {
     New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
 
     $destinationName = Split-Path -Leaf $DestinationPath
-    $copyDestinationPath = Join-Path $destinationFolder (".patflow_copy_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName)
-    $replaceBackupPath = Join-Path $destinationFolder (".patflow_replace_backup_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName)
+    $copyDestinationName = ".patflow_copy_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
+    $replaceBackupName = ".patflow_replace_backup_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
+    $copyDestinationPath = Join-Path $destinationFolder $copyDestinationName
+    $replaceBackupPath = Join-Path $destinationFolder $replaceBackupName
 
     Write-BenningLog -Config $Config -Message "Copying file for ${Purpose}: $SourcePath -> $copyDestinationPath"
     Copy-Item -LiteralPath $SourcePath -Destination $copyDestinationPath -Force
 
+    $destinationWasMoved = $false
     try {
         if (Test-Path -LiteralPath $DestinationPath) {
-            [System.IO.File]::Replace($copyDestinationPath, $DestinationPath, $replaceBackupPath, $true)
+            Move-Item -LiteralPath $DestinationPath -Destination $replaceBackupPath -Force
+            $destinationWasMoved = $true
+            Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
             Remove-Item -LiteralPath $replaceBackupPath -Force -ErrorAction SilentlyContinue
         } else {
             Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
         }
     } catch {
+        if ($destinationWasMoved -and !(Test-Path -LiteralPath $DestinationPath) -and (Test-Path -LiteralPath $replaceBackupPath)) {
+            Move-Item -LiteralPath $replaceBackupPath -Destination $DestinationPath -Force -ErrorAction SilentlyContinue
+        }
+
         Remove-Item -LiteralPath $copyDestinationPath -Force -ErrorAction SilentlyContinue
         throw
     }
@@ -250,7 +394,7 @@ function Show-BenningMessage {
 
     $title = $Config.Ui.MessageTitle
     if ([string]::IsNullOrWhiteSpace($title)) {
-        $title = "PATflow BENNING Automation"
+        $title = "PATflow BENNING Automatisierung"
     }
 
     Show-BenningToastNotification -Config $Config -Title $title -Message $Message | Out-Null
@@ -260,6 +404,7 @@ function Show-BenningToastNotification {
     param(
         [Parameter(Mandatory = $true)][string]$Title,
         [Parameter(Mandatory = $true)][string]$Message,
+        [string]$UniqueIdentifier,
         $Config
     )
 
@@ -269,7 +414,16 @@ function Show-BenningToastNotification {
         }
 
         Import-Module BurntToast -ErrorAction Stop
-        New-BurntToastNotification -Text $Title, $Message -Silent -ErrorAction Stop
+        $toastParameters = @{
+            Text = @($Title, $Message)
+            Silent = $true
+            ErrorAction = "Stop"
+        }
+        if (![string]::IsNullOrWhiteSpace($UniqueIdentifier)) {
+            $toastParameters.UniqueIdentifier = $UniqueIdentifier
+        }
+
+        New-BurntToastNotification @toastParameters
         Write-BenningLog -Config $Config -Message "BurntToast notification shown: $Title - $Message"
         return $true
     } catch {

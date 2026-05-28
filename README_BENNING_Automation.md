@@ -112,6 +112,15 @@ If PC-Win supports opening a database path from the command line, set `BenningPr
 `Write-MasterDatabaseToSdIfUnchanged.ps1` requires `MasterDbPath` to point to an existing master database. The SD import watcher can run without reading that file while copying SD data into `Incoming`; the backup of the existing master database belongs to the later move-to-DB step.
 
 Notifications use the PowerShell module `BurntToast`. PATflow logs a warning if the module is missing.
+Database workflow notifications use the fixed BurntToast identifier `PATflow-Database`; PDF workflow notifications use `PATflow-Pdf`. New normal status notifications replace the previous notification for the same workflow. Error notifications use separate identifiers so they remain visible as individual errors.
+
+The current machine-readable status is written to:
+
+```text
+C:\PATflow\State\status.json
+```
+
+The status file uses English state names/messages and keeps the last error with timestamp in `LastError`.
 
 PATflow copies to temporary files in the destination folder and then replaces the final destination only after the temporary copy is complete. This is intentionally safer than Windows Explorer copy dialogs for existing database files.
 

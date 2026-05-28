@@ -57,16 +57,44 @@ try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     Initialize-BenningFolders -Config $config | Out-Null
     Write-BenningLog -Config $config -Message "Starting PDF print watcher"
+    Set-BenningStatus -Config $config -Workflow "Pdf" -State "WaitingForPrintData" -Message "Waiting for new print data."
+    Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck" -Message "Warte auf neue Druckdaten"
+    $waitingForPrintDataNotified = $true
+    $lastPdfBatchSignature = ""
+    $shownPdfErrorSignatures = @{}
 
     do {
         $pdfs = Get-ChildItem -LiteralPath $config.Pdf.ExportPath -Filter "*.pdf" -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime
+
+        $pdfCount = @($pdfs).Count
+        if ($pdfCount -gt 0) {
+            $pdfBatchSignature = (@($pdfs) | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join ";;"
+            if ($pdfBatchSignature -ne $lastPdfBatchSignature) {
+                Set-BenningStatus -Config $config -Workflow "Pdf" -State "PrintingStarted" -Message ("Print started for {0} file(s)." -f $pdfCount)
+                Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck" -Message ("Druck für {0} Dateien gestartet" -f $pdfCount)
+                $lastPdfBatchSignature = $pdfBatchSignature
+            }
+
+            $waitingForPrintDataNotified = $false
+        } elseif (!$waitingForPrintDataNotified) {
+            Set-BenningStatus -Config $config -Workflow "Pdf" -State "WaitingForPrintData" -Message "Waiting for new print data."
+            Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck" -Message "Warte auf neue Druckdaten"
+            $waitingForPrintDataNotified = $true
+            $lastPdfBatchSignature = ""
+        }
 
         foreach ($pdf in $pdfs) {
             try {
                 Print-BenningPdf -PdfFile $pdf -Config $config
             } catch {
                 Write-BenningLog -Config $config -Level "ERROR" -Message "PDF printing failed for $($pdf.FullName): $($_.Exception.Message)"
+                Set-BenningStatus -Config $config -Workflow "Pdf" -State "Error" -Message "PDF printing failed." -ErrorMessage $_.Exception.Message
+                $pdfErrorSignature = "{0}|{1}" -f $pdf.FullName, $_.Exception.Message
+                if (!$shownPdfErrorSignatures.ContainsKey($pdfErrorSignature)) {
+                    Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck Fehler" -Message "Fehler beim PDF-Druck. Details stehen im Log." -Error
+                    $shownPdfErrorSignatures[$pdfErrorSignature] = $true
+                }
             }
         }
 
@@ -77,6 +105,8 @@ try {
 } catch {
     if ($config) {
         Write-BenningLog -Config $config -Level "ERROR" -Message $_.Exception.Message
+        Set-BenningStatus -Config $config -Workflow "Pdf" -State "Error" -Message "PDF watcher failed." -ErrorMessage $_.Exception.Message
+        Show-PatflowWorkflowToast -Config $config -Workflow "Pdf" -Title "PATflow PDF Druck Fehler" -Message "Fehler im PDF-Watcher. Details stehen im Log." -Error
     }
 
     throw
