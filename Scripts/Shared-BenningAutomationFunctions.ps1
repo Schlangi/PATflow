@@ -244,7 +244,12 @@ function Show-PatflowWorkflowToast {
         $identifier = "PATflow-$Workflow-Error-$([guid]::NewGuid().ToString("N"))"
     }
 
-    Show-BenningToastNotification -Config $Config -Title $Title -Message $Message -UniqueIdentifier $identifier | Out-Null
+    $headerTitle = "PATflow DB"
+    if ($Workflow -eq "Pdf") {
+        $headerTitle = "PATflow PDF"
+    }
+
+    Show-BenningToastNotification -Config $Config -Title $Title -Message $Message -UniqueIdentifier $identifier -HeaderId "PATflow-$Workflow" -HeaderTitle $headerTitle | Out-Null
 }
 
 function ConvertFrom-BenningEscapedText {
@@ -312,7 +317,8 @@ function Copy-BenningFile {
         [Parameter(Mandatory = $true)][string]$SourcePath,
         [Parameter(Mandatory = $true)][string]$DestinationPath,
         $Config,
-        [string]$Purpose = "file copy"
+        [string]$Purpose = "file copy",
+        [string]$OriginalArchivePath
     )
 
     $sourceItem = Get-Item -LiteralPath $SourcePath
@@ -347,6 +353,26 @@ function Copy-BenningFile {
             Move-Item -LiteralPath $DestinationPath -Destination $replaceBackupPath -Force
             $destinationWasMoved = $true
             Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
+            if (![string]::IsNullOrWhiteSpace($OriginalArchivePath)) {
+                try {
+                    $originalArchiveFolder = Split-Path -Parent $OriginalArchivePath
+                    if (![string]::IsNullOrWhiteSpace($originalArchiveFolder) -and !(Test-Path -LiteralPath $originalArchiveFolder)) {
+                        New-Item -ItemType Directory -Force -Path $originalArchiveFolder | Out-Null
+                    }
+
+                    Copy-Item -LiteralPath $replaceBackupPath -Destination $OriginalArchivePath -Force
+                    $archiveItem = Get-Item -LiteralPath $OriginalArchivePath
+                    $backupItem = Get-Item -LiteralPath $replaceBackupPath
+                    if ($archiveItem.Length -ne $backupItem.Length) {
+                        throw "Original archive size mismatch for ${Purpose}: $replaceBackupPath -> $OriginalArchivePath"
+                    }
+
+                    Write-BenningLog -Config $Config -Message "Archived replaced destination for ${Purpose}: $OriginalArchivePath"
+                } catch {
+                    Write-BenningLog -Config $Config -Level "WARN" -Message "Could not archive replaced destination for ${Purpose}: $($_.Exception.Message)"
+                }
+            }
+
             Remove-Item -LiteralPath $replaceBackupPath -Force -ErrorAction SilentlyContinue
         } else {
             Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
@@ -463,6 +489,8 @@ function Show-BenningToastNotification {
         [Parameter(Mandatory = $true)][string]$Title,
         [Parameter(Mandatory = $true)][string]$Message,
         [string]$UniqueIdentifier,
+        [string]$HeaderId,
+        [string]$HeaderTitle,
         $Config
     )
 
@@ -482,6 +510,10 @@ function Show-BenningToastNotification {
         }
         if (![string]::IsNullOrWhiteSpace($UniqueIdentifier)) {
             $toastParameters.UniqueIdentifier = $UniqueIdentifier
+        }
+
+        if (![string]::IsNullOrWhiteSpace($HeaderId) -and ![string]::IsNullOrWhiteSpace($HeaderTitle)) {
+            $toastParameters.Header = New-BTHeader -Id $HeaderId -Title $HeaderTitle
         }
 
         New-BurntToastNotification @toastParameters

@@ -5,7 +5,7 @@ param(
 
     [string]$SourceDeviceDbPath,
 
-    [int]$PollSeconds = 5,
+    [int]$PollSeconds = 1,
 
     [switch]$Json
 )
@@ -174,25 +174,16 @@ try {
     $archiveOriginalPath = Join-Path $paths.Archive ("{0}_sd_original_{1}" -f $timestamp, $sourceItem.Name)
     $archiveChangedPath = Join-Path $paths.Archive ("{0}_pcwin_changed_{1}" -f $timestamp, (Split-Path -Leaf $workDbPath))
 
-    $originalMovedToArchive = $false
     try {
         Set-BenningStatus -Config $config -Workflow "Database" -State "CopyingDatabaseToSdCard" -Message "Copying database to SD card. Please wait."
         Show-PatflowWorkflowToast -Config $config -Workflow "Database" -Title "PATflow Datenbank Automatisierung" -Message "Kopiere Datenbank auf SD Karte, bitte warten!"
         $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "direct workflow write-back to SD: $SourceDeviceDbPath"
-        Write-BenningLog -Config $config -Message "Write-back phase: archive original SD database. Source: $SourceDeviceDbPath Target: $archiveOriginalPath"
-        Copy-BenningFile -Config $config -SourcePath $SourceDeviceDbPath -DestinationPath $archiveOriginalPath -Purpose "original SD database archive copy"
-        $originalMovedToArchive = $true
 
-        Write-BenningLog -Config $config -Message "Write-back phase: copy changed master database to SD. Source: $workDbPath Target: $SourceDeviceDbPath"
-        Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $SourceDeviceDbPath -Purpose "changed master database write-back to SD"
+        Write-BenningLog -Config $config -Message "Write-back phase: copy changed master database to SD. Source: $workDbPath Target: $SourceDeviceDbPath OriginalArchive: $archiveOriginalPath"
+        Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $SourceDeviceDbPath -Purpose "changed master database write-back to SD" -OriginalArchivePath $archiveOriginalPath
         Write-BenningLog -Config $config -Message "Write-back phase: archive changed master database. Source: $workDbPath Target: $archiveChangedPath"
         Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $archiveChangedPath -Purpose "changed master database archive copy"
     } catch {
-        if ($originalMovedToArchive -and !(Test-Path -LiteralPath $SourceDeviceDbPath) -and (Test-Path -LiteralPath $archiveOriginalPath)) {
-            Copy-BenningFile -Config $config -SourcePath $archiveOriginalPath -DestinationPath $SourceDeviceDbPath -Purpose "restore original SD database after write-back failure"
-            Write-BenningLog -Config $config -Level "WARN" -Message "Restored original SD database after write-back failure: $SourceDeviceDbPath"
-        }
-
         throw
     }
 

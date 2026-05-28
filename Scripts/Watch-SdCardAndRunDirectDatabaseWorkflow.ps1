@@ -20,7 +20,7 @@ function Invoke-BenningPrepareOnce {
     param($ConfigPath)
 
     $prepareScript = Join-Path $PSScriptRoot "Copy-DeviceDatabaseFromSdToIncoming.ps1"
-    $arguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $prepareScript, "-Json", "-SkipUnchanged", "-SuppressErrorMessage")
+    $arguments = @("-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", $prepareScript, "-Json", "-SkipUnchanged", "-SuppressErrorMessage")
     if ($ConfigPath) {
         $arguments += @("-ConfigPath", $ConfigPath)
     }
@@ -53,6 +53,9 @@ function Invoke-BenningIncomingProcessor {
     $processorScript = Join-Path $PSScriptRoot "Move-IncomingDatabaseToDbStartPcWinAndWriteBackToSd.ps1"
     $arguments = @(
         "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
         "-ExecutionPolicy",
         "Bypass",
         "-File",

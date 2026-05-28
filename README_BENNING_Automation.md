@@ -112,7 +112,7 @@ If PC-Win supports opening a database path from the command line, set `BenningPr
 `Write-MasterDatabaseToSdIfUnchanged.ps1` requires `MasterDbPath` to point to an existing master database. The SD import watcher can run without reading that file while copying SD data into `Incoming`; the backup of the existing master database belongs to the later move-to-DB step.
 
 Notifications use the PowerShell module `BurntToast`. PATflow logs a warning if the module is missing.
-Database workflow notifications use the fixed BurntToast identifier `PATflow-Database`; PDF workflow notifications use `PATflow-Pdf`. New normal status notifications replace the previous notification for the same workflow. Error notifications use separate identifiers so they remain visible as individual errors.
+Database workflow notifications use the fixed BurntToast identifier `PATflow-Database`; PDF workflow notifications use `PATflow-Pdf`. New normal status notifications replace the previous notification for the same workflow. Error notifications use separate identifiers so they remain visible as individual errors. Toast headers group normal messages as `PATflow DB` and `PATflow PDF`.
 
 The current machine-readable status is written to:
 
@@ -155,15 +155,17 @@ The helper registers two scheduled tasks:
 - `PATflow SD Card Workflow Watcher`
 - `PATflow PDF Print Watcher`
 
-The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and verifies that Windows can resolve the account.
+The helper normalizes local `.\UserName` values to `COMPUTERNAME\UserName` and verifies that Windows can resolve the account. The tasks start Windows PowerShell with `-WindowStyle Hidden` and `-NonInteractive` so no PowerShell window should remain visible after logon.
 
 ## PDF Printing
 
 BENNING PC-Win should export reports as PDF into the folder configured by `Pdf.ExportPath`, for example:
 
 ```text
-C:\PATflow\PDF_Export
+C:\BenningDB\printInbox
 ```
+
+On existing BENNING installations, `C:\BenningDB\printInbox` can be used as `Pdf.ExportPath` and `C:\BenningDB\Berichtsarchiv` can be used as `Pdf.ArchivePath`. `Pdf.QueuePath` should remain a PATflow working folder, for example `C:\PATflow\PrintQueue`.
 
 `Watch-PdfExportAndPrintNewPdfs.ps1` watches that folder. For every new PDF it:
 

@@ -45,6 +45,9 @@ function Register-PATflowLogonTask {
 
     $arguments = @(
         "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
         "-ExecutionPolicy",
         "Bypass",
         "-File",
