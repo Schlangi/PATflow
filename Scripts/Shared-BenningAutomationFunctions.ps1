@@ -317,16 +317,29 @@ function Copy-BenningFile {
 
     $sourceItem = Get-Item -LiteralPath $SourcePath
     $destinationFolder = Split-Path -Parent $DestinationPath
-    New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
+    if ([string]::IsNullOrWhiteSpace($destinationFolder)) {
+        throw "Destination folder could not be resolved for: $DestinationPath"
+    }
+
+    if (!(Test-Path -LiteralPath $destinationFolder)) {
+        New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
+    }
 
     $destinationName = Split-Path -Leaf $DestinationPath
-    $copyDestinationName = "PATFLOW_COPY_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
-    $replaceBackupName = "PATFLOW_REPLACE_BACKUP_{0}_{1}" -f ([guid]::NewGuid().ToString("N")), $destinationName
+    $shortId = ([guid]::NewGuid().ToString("N")).Substring(0, 8)
+    $copyDestinationName = "PF$shortId.tmp"
+    $replaceBackupName = "PF$shortId.bak"
     $copyDestinationPath = Join-Path $destinationFolder $copyDestinationName
     $replaceBackupPath = Join-Path $destinationFolder $replaceBackupName
 
     Write-BenningLog -Config $Config -Message "Copying file for ${Purpose}: $SourcePath -> $copyDestinationPath"
     Copy-Item -LiteralPath $SourcePath -Destination $copyDestinationPath -Force
+
+    $copyItem = Get-Item -LiteralPath $copyDestinationPath
+    if ($copyItem.Length -ne $sourceItem.Length) {
+        Remove-Item -LiteralPath $copyDestinationPath -Force -ErrorAction SilentlyContinue
+        throw "Copied file size mismatch for ${Purpose}: $SourcePath -> $copyDestinationPath"
+    }
 
     $destinationWasMoved = $false
     try {
