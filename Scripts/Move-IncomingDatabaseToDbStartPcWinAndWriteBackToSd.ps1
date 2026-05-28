@@ -17,10 +17,14 @@ function Wait-ForBenningWorkSession {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [int]$PollSeconds,
-        $Config
+        $Config,
+        [int]$StableReleaseSeconds = 15
     )
 
     $hasObservedLock = !(Test-BenningFileAccess -Path $Path -Access "ReadWrite")
+    $releaseCandidateSince = $null
+    $releaseCandidateLogged = $false
+    $pcWinStillRunningLogged = $false
     Write-BenningLog -Config $Config -Message "Waiting for PC-Win to use and release database: $Path"
     if ($hasObservedLock) {
         Write-BenningLog -Config $Config -Message "Database is already locked by PC-Win: $Path"
@@ -28,12 +32,37 @@ function Wait-ForBenningWorkSession {
 
     while ($true) {
         $isFree = Test-BenningFileAccess -Path $Path -Access "ReadWrite"
+        $isPcWinRunning = Test-BenningProgramRunning -Config $Config
 
         if (!$isFree) {
             $hasObservedLock = $true
+            $releaseCandidateSince = $null
+            $releaseCandidateLogged = $false
+            $pcWinStillRunningLogged = $false
         } elseif ($hasObservedLock) {
-            Write-BenningLog -Config $Config -Message "Database was released by PC-Win: $Path"
-            return
+            if ($isPcWinRunning) {
+                if (!$pcWinStillRunningLogged) {
+                    Write-BenningLog -Config $Config -Message "Database is currently accessible, but BENNING PC-Win is still running. Waiting for stable application close: $Path"
+                    $pcWinStillRunningLogged = $true
+                }
+
+                $releaseCandidateSince = $null
+                $releaseCandidateLogged = $false
+            } else {
+                if (!$releaseCandidateSince) {
+                    $releaseCandidateSince = Get-Date
+                }
+
+                if (!$releaseCandidateLogged) {
+                    Write-BenningLog -Config $Config -Message "Database release candidate detected. Waiting $StableReleaseSeconds seconds for stable release: $Path"
+                    $releaseCandidateLogged = $true
+                }
+
+                if (((Get-Date) - $releaseCandidateSince).TotalSeconds -ge $StableReleaseSeconds) {
+                    Write-BenningLog -Config $Config -Message "Database was released by PC-Win and stayed accessible for $StableReleaseSeconds seconds: $Path"
+                    return
+                }
+            }
         }
 
         Start-Sleep -Seconds $PollSeconds
