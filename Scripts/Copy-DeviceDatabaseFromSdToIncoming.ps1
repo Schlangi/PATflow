@@ -70,8 +70,8 @@ try {
         }
     }
 
-    Copy-Item -LiteralPath $deviceDb.FullName -Destination $incomingFile -Force
-    Copy-Item -LiteralPath $deviceDb.FullName -Destination $archiveFile -Force
+    Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $incomingFile -Purpose "device database import copy"
+    Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $archiveFile -Purpose "device database archive copy"
 
     $hash | Set-Content -LiteralPath $paths.StateHashFile -Encoding ASCII
     $hash | Set-Content -LiteralPath $deviceStateHashFile -Encoding ASCII

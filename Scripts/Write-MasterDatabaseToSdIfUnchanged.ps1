@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 try {
     $config = Get-BenningConfig -ConfigPath $ConfigPath
     $paths = Initialize-BenningFolders -Config $config
+    $sdWriteLockPath = $null
     Write-BenningLog -Config $config -Message "Starting master database write to SD card"
 
     $masterDb = Assert-BenningMasterDb -Config $config
@@ -43,8 +44,9 @@ try {
 
     Wait-BenningFileAccess -Config $config -Path $deviceDb.FullName -Access "ReadWrite" -Purpose "device database overwrite"
 
-    Copy-Item -LiteralPath $deviceDb.FullName -Destination $backupFile -Force
-    Copy-Item -LiteralPath $masterDb.FullName -Destination $deviceDb.FullName -Force
+    $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "master database write to SD: $($deviceDb.FullName)"
+    Copy-BenningFile -Config $config -SourcePath $deviceDb.FullName -DestinationPath $backupFile -Purpose "SD database backup before master write"
+    Copy-BenningFile -Config $config -SourcePath $masterDb.FullName -DestinationPath $deviceDb.FullName -Purpose "master database write to SD"
 
     $newHash = Get-BenningFileHash -Path $deviceDb.FullName
     $newHash | Set-Content -LiteralPath $paths.StateHashFile -Encoding ASCII
@@ -59,6 +61,7 @@ try {
     Write-BenningLog -Config $config -Message "New hash saved: $newHash"
     Write-BenningLog -Config $config -Message "Device-specific hash file: $deviceStateHashFile"
     Write-BenningLog -Config $config -Message "Device-specific metadata file: $deviceStateMetadataFile"
+    Show-BenningToastNotification -Config $config -Title "BENNING SD card updated" -Message "Test data was successfully written to the device: $($deviceDb.Name)" | Out-Null
     Show-BenningMessage -Config $config -Icon "Information" -Message "Test data was successfully written to the device."
 
     if ($Json) {
@@ -80,4 +83,8 @@ try {
     }
 
     throw
+} finally {
+    if ($config -and $sdWriteLockPath) {
+        Stop-BenningSdWriteLock -Config $config -LockPath $sdWriteLockPath
+    }
 }

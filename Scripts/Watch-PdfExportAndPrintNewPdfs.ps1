@@ -41,7 +41,7 @@ function Print-BenningPdf {
     $queueFile = Join-Path $Config.Pdf.QueuePath $PdfFile.Name
     $archiveFile = Join-Path $Config.Pdf.ArchivePath ("{0}_{1}" -f (Get-Date -Format "yyyyMMdd_HHmmss"), $PdfFile.Name)
 
-    Copy-Item -LiteralPath $PdfFile.FullName -Destination $queueFile -Force
+    Copy-BenningFile -Config $Config -SourcePath $PdfFile.FullName -DestinationPath $queueFile -Purpose "PDF print queue copy"
 
     if ([string]::IsNullOrWhiteSpace($Config.Pdf.PrinterName)) {
         Start-Process -FilePath $queueFile -Verb Print -WindowStyle Hidden

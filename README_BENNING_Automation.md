@@ -106,10 +106,13 @@ Check `Config\config.json` before running:
 - `Pdf.ArchivePath`
 - `Pdf.QueuePath`
 - `Pdf.PrinterName`
+- `Ui.ShowCopyProgressWindow`
 
 If PC-Win supports opening a database path from the command line, set `BenningProgramArguments` and use `{DatabasePath}` as placeholder. If it is empty, PC-Win is started without arguments and the user or PC-Win configuration must open the DB file from the `DB` folder.
 
 `Write-MasterDatabaseToSdIfUnchanged.ps1` requires `MasterDbPath` to point to an existing master database. The SD import watcher can run without reading that file while copying SD data into `Incoming`; the backup of the existing master database belongs to the later move-to-DB step.
+
+When `Ui.ShowCopyProgressWindow` is `true`, PATflow uses Windows Explorer copy dialogs for file copies. Existing destination files are replaced through a temporary copy first, so a failed copy should not immediately remove the previous destination file.
 
 ## Start Watcher
 
@@ -192,5 +195,6 @@ The PDFs remain archived after printing. PATflow does not delete archived PDFs a
 - Full hashing is only done when metadata indicates a change.
 - Original SD databases are archived before write-back.
 - The master database in `DB` is never moved to `Archive`; only copies are written to `Backups` or `Archive`.
+- While PATflow writes to the SD card, the SD watcher skips its polling cycle to avoid treating an in-progress write as a changed device database.
 - If write-back fails after archiving the original SD file, PATflow restores the original file to the SD card.
 - PDF printing keeps exported PDFs in `Pdf.ArchivePath` after printing.

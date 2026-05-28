@@ -87,6 +87,15 @@ try {
 
     do {
         try {
+            if (Test-BenningSdWriteInProgress -Config $config) {
+                Write-BenningLog -Config $config -Message "SD write is in progress, skipping watcher cycle."
+                if (!$Once) {
+                    Start-Sleep -Seconds $pollSeconds
+                }
+
+                continue
+            }
+
             $result = Invoke-BenningPrepareOnce -ConfigPath $config.ConfigPath
 
             if ($result -and $result.NoDeviceDatabase) {

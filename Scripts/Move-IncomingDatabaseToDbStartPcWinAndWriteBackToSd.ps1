@@ -58,6 +58,7 @@ try {
     $paths = Initialize-BenningFolders -Config $config
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $workflowStatePath = $null
+    $sdWriteLockPath = $null
 
     if ([string]::IsNullOrWhiteSpace($IncomingPath)) {
         $incomingItem = Get-ChildItem -LiteralPath $paths.Incoming -File -ErrorAction SilentlyContinue |
@@ -110,16 +111,16 @@ try {
         }
 
         $masterBackupPath = Join-Path $paths.Backups ("{0}_master_before_incoming_{1}" -f $timestamp, (Split-Path -Leaf $workDbPath))
-        Copy-Item -LiteralPath $workDbPath -Destination $masterBackupPath -Force
+        Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $masterBackupPath -Purpose "master database backup before incoming replacement"
         Write-BenningLog -Config $config -Message "Master database backup before incoming replacement: $masterBackupPath"
     }
 
     if ($incomingItem) {
-        Copy-Item -LiteralPath $incomingItem.FullName -Destination $workDbPath -Force
+        Copy-BenningFile -Config $config -SourcePath $incomingItem.FullName -DestinationPath $workDbPath -Purpose "incoming database copy to master DB"
         Remove-Item -LiteralPath $incomingItem.FullName -Force
         Write-BenningLog -Config $config -Message "Copied incoming database to master DB path and removed incoming copy: $workDbPath"
     } elseif (!$workDbExists) {
-        Copy-Item -LiteralPath $sourceItem.FullName -Destination $workDbPath -Force
+        Copy-BenningFile -Config $config -SourcePath $sourceItem.FullName -DestinationPath $workDbPath -Purpose "unchanged SD database copy to master DB"
         Write-BenningLog -Config $config -Message "Copied unchanged SD database directly to master DB path: $workDbPath"
     } else {
         Write-BenningLog -Config $config -Message "Using existing master database in DB folder: $workDbPath"
@@ -144,14 +145,16 @@ try {
 
     $originalMovedToArchive = $false
     try {
-        Move-Item -LiteralPath $SourceDeviceDbPath -Destination $archiveOriginalPath -Force
+        $sdWriteLockPath = Start-BenningSdWriteLock -Config $config -Reason "direct workflow write-back to SD: $SourceDeviceDbPath"
+        Copy-BenningFile -Config $config -SourcePath $SourceDeviceDbPath -DestinationPath $archiveOriginalPath -Purpose "original SD database archive copy"
+        Remove-Item -LiteralPath $SourceDeviceDbPath -Force
         $originalMovedToArchive = $true
 
-        Copy-Item -LiteralPath $workDbPath -Destination $SourceDeviceDbPath -Force
-        Copy-Item -LiteralPath $workDbPath -Destination $archiveChangedPath -Force
+        Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $SourceDeviceDbPath -Purpose "changed master database write-back to SD"
+        Copy-BenningFile -Config $config -SourcePath $workDbPath -DestinationPath $archiveChangedPath -Purpose "changed master database archive copy"
     } catch {
         if ($originalMovedToArchive -and !(Test-Path -LiteralPath $SourceDeviceDbPath) -and (Test-Path -LiteralPath $archiveOriginalPath)) {
-            Copy-Item -LiteralPath $archiveOriginalPath -Destination $SourceDeviceDbPath -Force
+            Copy-BenningFile -Config $config -SourcePath $archiveOriginalPath -DestinationPath $SourceDeviceDbPath -Purpose "restore original SD database after write-back failure"
             Write-BenningLog -Config $config -Level "WARN" -Message "Restored original SD database after write-back failure: $SourceDeviceDbPath"
         }
 
@@ -191,5 +194,9 @@ try {
 } finally {
     if ($workflowStatePath -and (Test-Path -LiteralPath $workflowStatePath)) {
         Remove-Item -LiteralPath $workflowStatePath -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($config -and $sdWriteLockPath) {
+        Stop-BenningSdWriteLock -Config $config -LockPath $sdWriteLockPath
     }
 }

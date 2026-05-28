@@ -105,6 +105,122 @@ function Test-BenningDirectWorkflowRunning {
     return Test-Path -LiteralPath $statePath
 }
 
+function Get-BenningSdWriteLockPath {
+    param($Config)
+
+    $paths = Get-BenningPaths -Config $Config
+    return Join-Path $paths.State "sd_write_in_progress.lock"
+}
+
+function Start-BenningSdWriteLock {
+    param(
+        $Config,
+        [Parameter(Mandatory = $true)][string]$Reason
+    )
+
+    $lockPath = Get-BenningSdWriteLockPath -Config $Config
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockPath) | Out-Null
+    "Started=$(Get-Date -Format o)`nReason=$Reason" | Set-Content -LiteralPath $lockPath -Encoding UTF8
+    Write-BenningLog -Config $Config -Message "SD write lock created: $Reason"
+    return $lockPath
+}
+
+function Stop-BenningSdWriteLock {
+    param(
+        $Config,
+        [string]$LockPath
+    )
+
+    if ([string]::IsNullOrWhiteSpace($LockPath)) {
+        $LockPath = Get-BenningSdWriteLockPath -Config $Config
+    }
+
+    if (Test-Path -LiteralPath $LockPath) {
+        Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
+        Write-BenningLog -Config $Config -Message "SD write lock removed."
+    }
+}
+
+function Test-BenningSdWriteInProgress {
+    param($Config)
+
+    $lockPath = Get-BenningSdWriteLockPath -Config $Config
+    if (!(Test-Path -LiteralPath $lockPath)) {
+        return $false
+    }
+
+    $lockItem = Get-Item -LiteralPath $lockPath -ErrorAction SilentlyContinue
+    if ($lockItem -and $lockItem.LastWriteTime -lt (Get-Date).AddHours(-2)) {
+        Write-BenningLog -Config $Config -Level "WARN" -Message "Ignoring stale SD write lock older than 2 hours: $lockPath"
+        Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+
+    return $true
+}
+
+function Test-BenningExplorerCopyProgressEnabled {
+    param($Config)
+
+    if ($Config.Ui -and $null -ne $Config.Ui.ShowCopyProgressWindow) {
+        return [bool]$Config.Ui.ShowCopyProgressWindow
+    }
+
+    return $true
+}
+
+function Copy-BenningFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        $Config,
+        [string]$Purpose = "file copy"
+    )
+
+    $sourceItem = Get-Item -LiteralPath $SourcePath
+    $destinationFolder = Split-Path -Parent $DestinationPath
+    New-Item -ItemType Directory -Force -Path $destinationFolder | Out-Null
+
+    $tempFolder = Join-Path $destinationFolder (".patflow_copy_{0}" -f ([guid]::NewGuid().ToString("N")))
+    $copyDestinationPath = Join-Path $tempFolder $sourceItem.Name
+    New-Item -ItemType Directory -Force -Path $tempFolder | Out-Null
+
+    if (Test-BenningExplorerCopyProgressEnabled -Config $Config) {
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $folder = $shell.Namespace($tempFolder)
+            if (!$folder) {
+                throw "Temporary destination folder could not be opened by Windows Shell: $tempFolder"
+            }
+
+            Write-BenningLog -Config $Config -Message "Starting Windows Explorer copy for ${Purpose}: $SourcePath -> $copyDestinationPath"
+            $folder.CopyHere($sourceItem.FullName, 16)
+
+            $deadline = (Get-Date).AddMinutes(30)
+            do {
+                Start-Sleep -Milliseconds 500
+                $destinationItem = Get-Item -LiteralPath $copyDestinationPath -ErrorAction SilentlyContinue
+                if ($destinationItem -and $destinationItem.Length -eq $sourceItem.Length -and (Test-BenningFileAccess -Path $copyDestinationPath -Access "Read")) {
+                    Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
+                    Remove-Item -LiteralPath $tempFolder -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-BenningLog -Config $Config -Message "Windows Explorer copy finished for ${Purpose}: $DestinationPath"
+                    return
+                }
+            } while ((Get-Date) -lt $deadline)
+
+            throw "Windows Explorer copy timed out during ${Purpose}: $DestinationPath"
+        } catch {
+            Write-BenningLog -Config $Config -Level "WARN" -Message "Windows Explorer copy failed during ${Purpose}, falling back to Copy-Item: $($_.Exception.Message)"
+        }
+    }
+
+    Copy-Item -LiteralPath $SourcePath -Destination $copyDestinationPath -Force
+    Move-Item -LiteralPath $copyDestinationPath -Destination $DestinationPath -Force
+    Remove-Item -LiteralPath $tempFolder -Recurse -Force -ErrorAction SilentlyContinue
+
+    Write-BenningLog -Config $Config -Message "File copied for ${Purpose}: $SourcePath -> $DestinationPath"
+}
+
 function Get-BenningFileMetadata {
     param([Parameter(Mandatory = $true)]$File)
 
@@ -166,12 +282,26 @@ function Show-BenningMessage {
 
     Add-Type -AssemblyName PresentationFramework
     $messageIcon = [System.Enum]::Parse([System.Windows.MessageBoxImage], $Icon)
-    [System.Windows.MessageBox]::Show(
-        $Message,
-        $Config.Ui.MessageTitle,
-        [System.Windows.MessageBoxButton]::OK,
-        $messageIcon
-    ) | Out-Null
+    $owner = New-Object System.Windows.Window
+    $owner.Topmost = $true
+    $owner.ShowInTaskbar = $false
+    $owner.WindowStyle = "None"
+    $owner.Width = 0
+    $owner.Height = 0
+    $owner.Left = -32000
+    $owner.Top = -32000
+    $owner.Show()
+    try {
+        [System.Windows.MessageBox]::Show(
+            $owner,
+            $Message,
+            $Config.Ui.MessageTitle,
+            [System.Windows.MessageBoxButton]::OK,
+            $messageIcon
+        ) | Out-Null
+    } finally {
+        $owner.Close()
+    }
 }
 
 function Escape-BenningXmlText {
